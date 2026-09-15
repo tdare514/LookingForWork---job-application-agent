@@ -24,6 +24,10 @@ class RawPosting:
 
     `raw` is kept so a mapping bug can be fixed without re-fetching, and so a
     field this version ignores is still recoverable later.
+
+    The detail fields below are optional because most sources describe a posting
+    in two calls: a list, then the posting itself. A row from the list alone is
+    still a useful row.
     """
 
     source: str
@@ -33,6 +37,12 @@ class RawPosting:
     location: str | None = None
     url: str | None = None
     posted_text: str | None = None
+    # Populated only by a detail fetch, which is opt-in because it costs one
+    # request per posting. A list-only fetch leaves these None, and everything
+    # downstream has to keep working when they are.
+    description: str | None = None
+    deadline: str | None = None
+    employment_type: str | None = None
     raw: dict[str, object] = field(default_factory=dict)
 
 
