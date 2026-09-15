@@ -126,11 +126,60 @@ Scope:
 
 ---
 
-## How the issues are organized
+## Issue map
 
-Each phase has a tracking epic. Task issues hang off their epic as sub-issues
-and carry the phase label plus an area label (`architecture`, `security`,
-`privacy`, `matching`, `resume`, `tracking`, `infra`, `docs`).
+Each phase has a tracking epic listing its tasks. Task issues carry the phase
+label plus an area label (`architecture`, `security`, `privacy`, `matching`,
+`resume`, `tracking`, `infra`, `docs`).
+
+**Phase 1 — Foundation (#1)**
+
+| # | Task |
+| --- | --- |
+| 5 | Decide and record the runtime stack (ADR 0002) — blocks everything below |
+| 6 | Scaffold the project: layout, lint, format, typecheck, tests |
+| 7 | CI pipeline with dependency audit and secret scanning |
+| 8 | Profile schema and configuration loader |
+| 9 | Local storage layer and forward-only migrations |
+| 15 | Secrets handling: OS keychain, never files or the database |
+| 21 | PII inventory and data retention policy |
+| 22 | Outbound request policy and central rate limiter |
+| 23 | Structured logging and append-only audit trail |
+| 24 | Make the human approval gate structural (ADR 0004) |
+| 25 | LLM client boundary with PII minimization and spend tracking |
+| 26 | CLI skeleton and command surface |
+
+**Phase 2 — Discovery and matching (#2)**
+
+| # | Task |
+| --- | --- |
+| 27 | Source adapter interface |
+| 28 | Canonical job schema and de-duplication |
+| 29 | Implement the first two source adapters |
+| 30 | Requirement extraction from posting descriptions |
+| 31 | Hard filters and decomposed match scoring |
+| 32 | Daily shortlist, filters, and digest |
+
+**Phase 3 — Resume and applications (#3)**
+
+| # | Task |
+| --- | --- |
+| 33 | Structured resume as the single source of truth |
+| 34 | Resume tailoring engine with a truthfulness constraint |
+| 35 | Cover letter generation and the answer library |
+| 36 | Document rendering to ATS-readable PDF and DOCX |
+| 37 | Application package assembly and the review workflow |
+
+**Phase 4 — Tracking and hardening (#4)**
+
+| # | Task |
+| --- | --- |
+| 38 | Application tracker and state machine |
+| 39 | Read-only mail ingestion that suggests state transitions |
+| 40 | Follow-up scheduling and reminders |
+| 41 | Funnel analytics and the effectiveness report |
+| 42 | Backup, export, and a verified purge |
+| 43 | Release hardening: security review and operational runbook |
 
 An issue is done when its acceptance criteria are checked, tests cover the
 behavior, and any user-visible change is documented.
@@ -138,4 +187,4 @@ behavior, and any user-visible change is documented.
 ## Open decisions
 
 Tracked as ADRs in [`docs/adr/`](docs/adr/). The first one to settle is the
-runtime stack — it blocks everything in Phase 1.
+runtime stack (#5) — it blocks everything in Phase 1.

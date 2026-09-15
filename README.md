@@ -12,8 +12,9 @@ constraint rather than a default setting.
 
 ## Status
 
-Planning. No implementation yet — the roadmap in [`ROADMAP.md`](ROADMAP.md) and
-the issue tracker are the current source of truth.
+Planning. No implementation yet — the [roadmap](ROADMAP.md) and the [issue
+tracker](../../issues) are the current source of truth. Work is organized as four
+phase epics (#1–#4) with 29 task issues beneath them.
 
 ## What it does
 
