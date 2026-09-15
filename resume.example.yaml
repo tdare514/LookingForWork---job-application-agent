@@ -54,7 +54,7 @@ roles:
       - id: genova-validation
         text: >-
           Conducted data validation and quality checks using Excel formulas and
-          conditional formatting across tracked work items
+          conditional formatting across 100+ tracked work items
         metric: 100+ tracked work items
         skills: [Excel, data validation, quality assurance]
         scope: contributed
@@ -65,7 +65,9 @@ roles:
         skills: [documentation, knowledge management]
         scope: owned
       - id: genova-event
-        text: Coordinated logistics and stakeholder outreach for an event
+        text: >-
+          Coordinated logistics and stakeholder outreach for a 100-attendee event
+          on a $7K budget, showcasing 5 AI-integrated solutions
         metric: 100 attendees, $7K budget, 5 AI-integrated solutions
         skills: [stakeholder communication, event coordination, budgeting]
         scope: owned
@@ -79,13 +81,14 @@ roles:
       - id: launchpath-requirements
         text: >-
           Translated business concepts into structured product requirements,
-          technical documentation and development plans
+          technical documentation and development plans across 3 AI-focused MVP
+          initiatives
         metric: 3 AI-focused MVP initiatives
         skills: [requirements gathering, technical writing]
         scope: owned
       - id: launchpath-stories
         text: >-
-          Created and organized user stories covering AI, data processing,
+          Created and organized 13+ user stories covering AI, data processing,
           backend/database integration and reporting requirements
         metric: 13+ user stories
         skills: [user stories, requirements analysis]
@@ -111,15 +114,15 @@ roles:
     accomplishments:
       - id: metro-ingestion
         text: >-
-          Collaborated with a software development team to build a Python data
-          ingestion system using REST APIs to collect labour-market data for
+          Collaborated with a 6-member software development team to build a Python
+          data ingestion system using REST APIs to collect labour-market data for
           real-estate visualizations
         metric: 6-member team
         skills: [Python, REST APIs, data ingestion]
         scope: contributed
       - id: metro-stories
         text: >-
-          Organized and documented user stories across epics in a structured
+          Organized and documented 85+ user stories across 3 epics in a structured
           knowledge base (GitHub wiki)
         metric: 85+ user stories across 3 epics
         skills: [documentation, requirements analysis]
@@ -138,9 +141,9 @@ projects:
     accomplishments:
       - id: jobagent-roadmap
         text: >-
-          Scoped a tool that sources, scores and tracks job applications,
-          defining a phased delivery roadmap with exit criteria and decomposing
-          it into tracked issues with acceptance criteria and dependencies
+          Scoped a tool that sources, scores and tracks job applications, defining
+          a phased delivery roadmap with exit criteria and decomposing it into 33
+          tracked issues with acceptance criteria and dependencies
         metric: 33 tracked issues
         skills: [requirements analysis, delivery planning, Agile]
         scope: owned
@@ -164,7 +167,7 @@ projects:
       - id: gryphon-research
         text: >-
           Researched methods to streamline landlord-student communication,
-          reducing average response time
+          reducing average response time by an estimated 40%
         metric: estimated 40% reduction
         skills: [user research, UI/UX]
         scope: contributed

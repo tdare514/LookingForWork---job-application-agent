@@ -13,7 +13,8 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - Claude in Chrome handoff (`c` on the board): opens the posting and copies a prompt that carries my standing answers and forbids both submitting and inventing.
 - Resume source of truth (`resume.example.yaml`, `jobagent resume validate`): every claim the agent may make, each accomplishment carrying its metric and the scope actually held.
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
-- 42 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
+- 63 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
 
 ## In progress
@@ -22,9 +23,9 @@ Nothing in flight.
 
 ## Next
 
-1. Selection and ordering: pick the accomplishments a posting actually calls for (#34).
-2. PDF/DOCX rendering that survives an ATS parser (#36).
-3. Cover letters and the answer library for recurring co-op questions (#35).
+1. Send the RBC and BMO applications. Packages are built; the company paragraph and the "why this company" answer still need me.
+2. Rephrasing toward a posting's vocabulary, through the same truthfulness gate (#34 follow-up).
+3. Follow-up scheduling once something is actually submitted (#40).
 
 ## Known limitations
 
