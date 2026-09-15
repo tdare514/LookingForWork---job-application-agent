@@ -88,6 +88,17 @@ class Project(BaseModel):
     accomplishments: list[Accomplishment] = Field(default_factory=list)
 
 
+class Standing(BaseModel):
+    """Answers every portal asks for. Facts, so they live with the other facts."""
+
+    authorization: str = ""
+    availability: str = ""
+    term_lengths: str = ""
+    notice: str = ""
+    compensation: str = ""
+    relocation: str = ""
+
+
 class Resume(BaseModel):
     contact: Contact
     summary: str
@@ -96,6 +107,7 @@ class Resume(BaseModel):
     projects: list[Project] = Field(default_factory=list)
     leadership: list[Accomplishment] = Field(default_factory=list)
     skills: dict[str, list[str]] = Field(default_factory=dict)
+    standing: Standing = Field(default_factory=Standing)
 
     @model_validator(mode="after")
     def _unique_accomplishment_ids(self) -> Resume:

@@ -16,6 +16,8 @@ import webbrowser
 from dataclasses import dataclass
 from pathlib import Path
 
+from jobagent.application.resume import Resume
+
 
 @dataclass(frozen=True)
 class Applicant:
@@ -34,26 +36,34 @@ class Applicant:
     availability: str
 
 
-DEFAULT_APPLICANT = Applicant(
-    name="Oluwatoby Dare",
-    email="dareoluwatoby@gmail.com",
-    phone="226-337-5946",
-    location="Mississauga, ON",
-    linkedin="linkedin.com/in/oluwatoby-dare",
-    github="github.com/tdare514",
-    school="University of Guelph",
-    degree="Bachelor of Computing (Honours), Computer Science",
-    grad="Expected 2026",
-    authorization="Canadian citizen / authorized to work in Canada",
-    availability="Available for a Winter 2027 term, starting January 2027",
-)
+def applicant_from(resume: Resume, *, authorization: str, availability: str) -> Applicant:
+    """Derive the portal answers from the resume, so there is one owner per fact.
+
+    Contact details are never hardcoded here: this repository is public, and the
+    real values live in the data directory. A test asserts the source tree stays
+    free of them.
+    """
+    edu = resume.education[0] if resume.education else None
+    return Applicant(
+        name=resume.contact.name,
+        email=resume.contact.email,
+        phone=resume.contact.phone,
+        location=resume.contact.location,
+        linkedin=resume.contact.linkedin or "",
+        github=resume.contact.github or "",
+        school=edu.school if edu else "",
+        degree=edu.credential if edu else "",
+        grad=edu.graduation if edu else "",
+        authorization=authorization,
+        availability=availability,
+    )
 
 
 def build_prompt(
     company: str,
     title: str,
     url: str | None,
-    applicant: Applicant = DEFAULT_APPLICANT,
+    applicant: Applicant,
     resume_path: Path | None = None,
 ) -> str:
     """The prompt handed to Claude in Chrome on the posting page."""

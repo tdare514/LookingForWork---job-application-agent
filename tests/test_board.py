@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from jobagent.application.handoff import build_prompt
+from pathlib import Path
+
+from jobagent.application.handoff import Applicant, applicant_from, build_prompt
 from jobagent.core.storage import Storage
 from jobagent.tracking.board import State, light_for
 from jobagent.tracking.repo import BoardRepo
@@ -64,16 +66,27 @@ def test_state_changes_are_audited(store: Storage) -> None:
     assert "job.state" in actions and "job.add" in actions
 
 
+def _applicant() -> Applicant:
+    from jobagent.application.resume import load
+
+    resume = load(Path(__file__).resolve().parents[1] / "resume.example.yaml")
+    return applicant_from(
+        resume,
+        authorization=resume.standing.authorization,
+        availability=resume.standing.availability,
+    )
+
+
 def test_handoff_prompt_forbids_submitting_and_inventing() -> None:
     """The gate is in the prompt because the human is the gate."""
-    prompt = build_prompt("BMO", "Business Analyst", "https://example.com")
+    prompt = build_prompt("BMO", "Business Analyst", "https://example.com", _applicant())
     assert "Do not click the final submit button." in prompt
     assert "Do not invent anything about my experience." in prompt
-    assert "dareoluwatoby@gmail.com" in prompt
+    assert "you@example.com" in prompt
 
 
 def test_handoff_prompt_carries_the_recurring_answers() -> None:
-    prompt = build_prompt("RBC", "Business Systems Analyst", None)
+    prompt = build_prompt("RBC", "Business Systems Analyst", None, _applicant())
     assert "Work authorization:" in prompt
     assert "January 2027" in prompt
 
@@ -105,3 +118,83 @@ async def test_board_keybindings_write_through_to_storage(data_dir: object) -> N
     with Storage() as check:
         states = sorted(j.state for j in BoardRepo(check).all())
     assert states == ["applied", "new"]
+
+
+def test_the_board_draft_key_writes_a_package(data_dir: object) -> None:
+    """d on the board must produce real files, not just a status line."""
+    import shutil
+    from pathlib import Path as P
+
+    from textual.widgets import DataTable
+
+    from jobagent.core.paths import ensure_data_dir
+    from jobagent.tracking.app import Board
+
+    root = P(__file__).resolve().parents[1]
+    shutil.copy(root / "resume.example.yaml", ensure_data_dir() / "resume.yaml")
+
+    with Storage() as setup:
+        BoardRepo(setup).add("BMO", "Business Analyst, Winter 2027")
+
+    async def drive() -> None:
+        app = Board()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("d")
+            await pilot.pause()
+            table = app.query_one(DataTable)
+            job_id = app._row_ids[table.cursor_row]
+            out = app._package_dir(job_id)
+            assert (out / "cover-letter.txt").is_file()
+            assert list(out.glob("*.pdf")), "no resume rendered"
+            assert list(out.glob("*.docx")), "no docx rendered"
+
+    import asyncio
+
+    asyncio.run(drive())
+
+
+def test_the_handoff_prompt_points_at_the_drafted_resume() -> None:
+    """A prompt telling Claude to upload a file that does not exist is useless."""
+    prompt = build_prompt(
+        "BMO",
+        "Business Analyst",
+        "https://example.com",
+        _applicant(),
+        resume_path=Path("/tmp/example-resume.pdf"),
+    )
+    assert "/tmp/example-resume.pdf" in prompt
+
+
+def test_a_missing_clipboard_tool_does_not_quit_the_board(
+    data_dir: object, monkeypatch: object
+) -> None:
+    """Losing your place on the board to dump text to stdout is a bad trade."""
+    import asyncio
+    import shutil
+    from pathlib import Path as P
+
+    import jobagent.tracking.app as app_module
+    from jobagent.core.paths import ensure_data_dir
+    from jobagent.tracking.app import Board
+
+    root = P(__file__).resolve().parents[1]
+    shutil.copy(root / "resume.example.yaml", ensure_data_dir() / "resume.yaml")
+    with Storage() as setup:
+        BoardRepo(setup).add("BMO", "Business Analyst")
+
+    monkeypatch.setattr(app_module, "copy_to_clipboard", lambda _text: None)  # type: ignore[attr-defined]
+
+    async def drive() -> None:
+        app = Board()
+        async with app.run_test() as pilot:
+            await pilot.pause()
+            await pilot.press("c")
+            await pilot.pause()
+            assert app.is_running, "the board must stay open without a clipboard"
+            from textual.widgets import DataTable
+
+            job_id = app._row_ids[app.query_one(DataTable).cursor_row]
+            assert (app._package_dir(job_id) / "claude-prompt.txt").is_file()
+
+    asyncio.run(drive())
