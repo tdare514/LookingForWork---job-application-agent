@@ -176,22 +176,42 @@ def normalize_location(location: str | None) -> str:
     return folded or _fold(location)
 
 
-def normalize_seniority(title: str, description: str | None = None) -> Seniority:
-    """Place a title on the ladder. Falls back to MID, the unmarked case.
+def seniority_of(title: str, description: str | None = None) -> tuple[Seniority, bool]:
+    """Place a title on the ladder, and say whether the posting actually said so.
+
+    The boolean is the part that matters to the hard filters (#31). MID is the
+    fallback for an unmarked title, not a reading of one, and roughly half of
+    bank postings are unmarked -- "Analyst, Risk Management" says nothing about
+    level. Cutting those for being two rungs from an intern target would empty
+    the board on a guess, and a filter that empties the board silently looks
+    exactly like a filter that works.
+
+    So the caller gets both: the level to score against, and whether it was read
+    or assumed. Scoring may use an assumed level; cutting may not.
 
     The description is consulted only when the title is silent, which is the
-    common case for "Analyst, Risk Management" at a bank.
+    common case for the bank postings this was tuned against.
     """
     haystack = _fold(title)
     for pattern, level in _SENIORITY_PATTERNS:
         if pattern.search(haystack):
-            return level
+            return level, True
     if description:
         head = _fold(description)[:400]
         for pattern, level in _SENIORITY_PATTERNS:
             if pattern.search(head):
-                return level
-    return Seniority.MID
+                return level, True
+    return Seniority.MID, False
+
+
+def normalize_seniority(title: str, description: str | None = None) -> Seniority:
+    """The level alone, for callers that only need somewhere to put the row.
+
+    `seniority_of` is the one to reach for when the difference between a level
+    that was read and one that was assumed changes what you do next.
+    """
+    level, _matched = seniority_of(title, description)
+    return level
 
 
 def seniority_distance(a: Seniority, b: Seniority) -> int:

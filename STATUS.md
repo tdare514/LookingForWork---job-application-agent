@@ -24,6 +24,7 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - `jobagent extract` — rule-based requirements from posting text (#30): required vs preferred skills, years, compensation, work arrangement, and the closing date. Evaluated against 12 hand-labelled real postings with per-field precision and recall enforced in CI.
 - `jobagent report` — funnel with denominators stated, small samples flagged, and a plain "nothing submitted yet" when that is the truth.
 - `jobagent export` / `purge` — one archive out, and a delete that verifies nothing recoverable remains.
+- `jobagent score` — hard filters then a decomposed score, both stored per job. Filters cut for a stated reason (`--filtered` lists them); absence never cuts, so a posting silent on pay, sponsorship or level is judged, not dropped. `--explain <id>` prints the five components with the weight each carried and a line on what it looked at. A component with nothing to judge on is dropped and the remaining weights rescale, so a row with no description still ranks.
 - Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
 
 ## In progress
@@ -34,14 +35,16 @@ Nothing in flight.
 
 1. Send the RBC and BMO applications. Packages are built; the company paragraph and the "why this company" answer still need me.
 2. Rephrasing toward a posting's vocabulary, through the same truthfulness gate.
-3. Hard filters and scoring (#31), rule-based, reading the extracted requirements.
+3. Daily shortlist and digest (#32) — thresholds, score movement, reposts, and what the filters removed in aggregate. `score` prints a plain ranked table; the digest is the reading queue on top of it.
 
 ## Known limitations
 
 - **Workday fetch is verified against live RBC, BMO and TD tenants** (2026-09-15, #57) — real rows, correct ids, resolving URLs. The 403 previously recorded here was the build container's proxy, not a tenant. A 200 is reachability, not permission: `terms.allows_automated_access` stays `unverified` until someone reads them.
 - **Scotiabank has no Workday adapter and cannot have one.** `jobs.scotiabank.com` runs SAP SuccessFactors; the `scotiabank.wd3` tenant does not exist. Scotiabank closes 2026-10-02 — use the Claude in Chrome handoff.
 - A 401/403 from a tenant is treated as a refusal and stops that adapter, with the Claude in Chrome handoff as the fallback. No circumvention.
-- Scoring is not built. When it is, it is rule-based: no metered API calls in the core loop. The 0.25 "semantic fit" weight in `docs/job-matching.md` needs an embedding model and cannot ship as specified — #31 will need a re-weighting decision.
+- **Semantic fit does not ship and the profile refuses a non-zero weight for it.** It needs an embedding model; a metered embeddings API is out of scope and no local backend has been chosen. It is recorded in every decomposition as explicitly unavailable rather than silently ignored.
+- Scoring totals are strictly comparable only between postings measured on the same components. Every score records which ones those were, and `jobagent score` prints the count per row — a row scored on 2 of 5 is a thinner judgement than one scored on 4.
+- Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read. The 0.25 "semantic fit" weight in `docs/job-matching.md` needs an embedding model and cannot ship as specified — #31 will need a re-weighting decision.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.

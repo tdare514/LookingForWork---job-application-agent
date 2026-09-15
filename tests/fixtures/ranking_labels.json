@@ -1,0 +1,76 @@
+{
+  "_README": [
+    "Hand-labelled ground truth for the ranking regression set (#31).",
+    "",
+    "Each label is a judgement made by reading the posting in tests/fixtures/postings.json",
+    "and asking one question: on a Winter 2027 co-op search out of Toronto, would this be",
+    "opened or passed over? The labels were NOT read off the scorer's output. A label that",
+    "agrees with the scorer only because it was copied from it measures nothing.",
+    "",
+    "label:",
+    "  pursue     - clearly worth an evening. Must outscore every 'skip'.",
+    "  skip       - clearly not. Must be outscored by every 'pursue'.",
+    "  borderline - genuinely arguable. Asserted only to beat the clear skips, never",
+    "               pinned against the pursues: which side of a borderline case a tuning",
+    "               change lands on is the thing that is actually uncertain, and a test",
+    "               that pins it fails on every honest improvement.",
+    "",
+    "filtered_by: the hard-filter rule expected to cut the row before scoring. A row with",
+    "  this set is never scored, so it carries no label. Naming the rule rather than just",
+    "  'cut' is what makes an over-eager filter visible: if seniority starts swallowing",
+    "  rows that location used to cut, the rule name changes and the test says so.",
+    "",
+    "The profile these are judged against is build_profile() in tests/test_ranking.py.",
+    "Changing that profile changes every label here, so change both together."
+  ],
+  "postings": {
+    "R-0000186717": {
+      "label": "pursue",
+      "why": "The target role exactly: a Winter 2027 RBC risk internship in Toronto, asking for SQL, Excel and risk vocabulary the profile has."
+    },
+    "R-0000187520": {
+      "label": "pursue",
+      "why": "Same shape and season -- an RBC Winter 2027 internship in Toronto. The skill match is weaker than the credit risk posting, and it should rank below it, but a Toronto co-op posting in the target term is never a skip."
+    },
+    "R_1499218": {
+      "label": "borderline",
+      "why": "Quantitative analytics and stress testing model development is an exact domain match, and the posting carries no level marker. But it is not advertised as a student role, so whether it is open to a co-op term is unstated. Genuinely arguable, which is the point of the label."
+    },
+    "R_1508330": {
+      "label": "skip",
+      "why": "A junior Toronto role, so the filters correctly let it through -- but a contact centre representative is not an analytical position and its long description names none of the profile's skills. This is the row that catches a scorer treating 'we read it and found nothing' as 'we do not know'."
+    },
+    "R-0000183468": {
+      "filtered_by": "location",
+      "why": "New York. Not commutable, and the profile does not accept remote."
+    },
+    "R-0000187859": {
+      "filtered_by": "location",
+      "why": "Jersey City."
+    },
+    "R260025276": {
+      "filtered_by": "seniority",
+      "why": "Senior Manager -- four rungs above an intern or junior target."
+    },
+    "R260026107": {
+      "filtered_by": "seniority",
+      "why": "Manager."
+    },
+    "R260026756": {
+      "filtered_by": "seniority",
+      "why": "Bank Manager II, and in Emeryville. Seniority is checked first, so that is the rule that should name it."
+    },
+    "R260026119": {
+      "filtered_by": "seniority",
+      "why": "Director."
+    },
+    "R_1468577": {
+      "filtered_by": "location",
+      "why": "Montreal. The title also carries no level marker, so seniority cannot cut it -- location is the rule that has to."
+    },
+    "R_1499215": {
+      "filtered_by": "seniority",
+      "why": "Senior Quantitative Analyst -- two rungs from junior, and a genuinely different job from the Specialist posting above it that is left in."
+    }
+  }
+}

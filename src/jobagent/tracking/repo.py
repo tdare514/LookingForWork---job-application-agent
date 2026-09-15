@@ -9,6 +9,7 @@ from typing import Any
 
 from jobagent.core.storage import Storage, utcnow
 from jobagent.matching.extract import Requirements
+from jobagent.matching.filters import Listing, Verdict
 from jobagent.matching.normalize import (
     dedupe_key,
     normalize_company,
@@ -17,6 +18,7 @@ from jobagent.matching.normalize import (
     normalize_title,
     same_role,
 )
+from jobagent.matching.score import Score
 from jobagent.tracking.board import State, rank_for
 
 
@@ -318,6 +320,105 @@ class BoardRepo:
             return None
         loaded: dict[str, Any] = json.loads(row["payload"])
         return loaded
+
+    # -- scoring inputs ----------------------------------------------------
+
+    def scoring_rows(self) -> list[tuple[int, Listing, str | None]]:
+        """Every job as (id, listing, posted_at), ready for filters and scoring.
+
+        A separate read rather than widening `Job`. `Job` is the board's row and
+        is carried through the TUI, the funnel and the followups; adding six
+        columns it never renders would make every one of those pay for this.
+        """
+        rows = self.store.connect().execute(
+            "SELECT id, company, title, location, work_arrangement, description,"
+            " compensation_min, compensation_max, currency, posted_at FROM jobs"
+        )
+        return [
+            (
+                int(r["id"]),
+                Listing(
+                    company=r["company"],
+                    title=r["title"],
+                    location=r["location"],
+                    work_arrangement=r["work_arrangement"],
+                    description=r["description"],
+                    compensation_min=r["compensation_min"],
+                    compensation_max=r["compensation_max"],
+                    currency=r["currency"],
+                ),
+                r["posted_at"],
+            )
+            for r in rows
+        ]
+
+    # -- scores ------------------------------------------------------------
+
+    def save_score(self, job_id: int, score: Score, verdict: Verdict) -> None:
+        """Store one scoring pass, filtered or not, with its decomposition.
+
+        Appended rather than replaced, matching `save_requirements` above and
+        for the same reason: the history is what lets #32 say "this role's score
+        moved" instead of only ever knowing the latest number.
+
+        A filtered job is stored with a total of 0 and its reason. It is kept
+        rather than dropped so that a filter cutting too aggressively is
+        discoverable -- an empty board and a board whose every row was cut by
+        one over-eager rule look identical from the outside otherwise.
+        """
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT INTO scores (job_id, total, components, filtered, filter_reason,"
+                " scored_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (
+                    job_id,
+                    score.total if verdict.passed else 0.0,
+                    json.dumps(score.as_dict()),
+                    0 if verdict.passed else 1,
+                    None if verdict.passed else f"{verdict.rule}: {verdict.reason}",
+                    utcnow(),
+                ),
+            )
+
+    def latest_scores(self) -> dict[int, dict[str, Any]]:
+        """The most recent score per job, keyed by job id.
+
+        `MAX(id)` rather than `MAX(scored_at)`: two runs in the same second are
+        a thing that happens in tests and on a fast machine, and a timestamp
+        cannot order them.
+        """
+        rows = self.store.connect().execute(
+            "SELECT s.job_id, s.total, s.components, s.filtered, s.filter_reason, s.scored_at"
+            " FROM scores s JOIN (SELECT job_id, MAX(id) AS newest FROM scores GROUP BY job_id) m"
+            " ON s.id = m.newest"
+        )
+        return {
+            int(r["job_id"]): {
+                "total": float(r["total"]),
+                "components": json.loads(r["components"]),
+                "filtered": bool(r["filtered"]),
+                "filter_reason": r["filter_reason"],
+                "scored_at": r["scored_at"],
+            }
+            for r in rows
+        }
+
+    def filtered_jobs(self) -> list[tuple[Job, str]]:
+        """Every job cut by the hard filters, with the reason it was cut.
+
+        The acceptance criterion #31 asks for by name. Without it a filter that
+        is eating the board is invisible.
+        """
+        latest = self.latest_scores()
+        out: list[tuple[Job, str]] = []
+        for job_id, record in latest.items():
+            if not record["filtered"]:
+                continue
+            job = self.get(job_id)
+            if job is not None:
+                out.append((job, str(record["filter_reason"] or "no reason recorded")))
+        out.sort(key=lambda pair: (pair[0].company.lower(), pair[0].title.lower()))
+        return out
 
     def jobs_with_descriptions(self) -> list[tuple[int, str]]:
         rows = self.store.connect().execute(

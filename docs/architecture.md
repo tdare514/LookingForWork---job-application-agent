@@ -91,13 +91,23 @@ preserved — a role reposted three times in six weeks is a signal.
 
 ### Matching
 
-Two-stage. Hard filters first: location, work arrangement, visa requirement,
-compensation floor. These are boolean and cheap, and they cut the candidate set
-before anything expensive runs. Then a decomposed score over skill overlap,
-seniority fit, domain relevance, and semantic similarity to the profile.
+Two-stage. Hard filters first: company blocklist, visa requirement, seniority
+distance, work arrangement, location, compensation floor, profile deal-breakers.
+These are boolean and cheap, and they cut the candidate set before anything
+expensive runs. A cut is stored with the rule that made it, never discarded, so
+an over-eager filter is a query rather than a guess. Missing data always passes:
+a posting silent on pay has not offered a low one.
 
-Scores are stored with their components. "Why is this ranked 7th" must be
-answerable from the database, not from re-running the model.
+Then a decomposed score over skill overlap, seniority fit, domain relevance and
+freshness. Semantic fit is in the schema and carries no weight, per
+[job-matching](job-matching.md).
+
+Scores are stored with their components, each with the weight it carried and a
+line on what it looked at. "Why is this ranked 7th" must be answerable from the
+database, not from re-running the model. A component with nothing to judge on is
+stored as unavailable and the remaining weights rescale, so a posting that has
+not been fetched in detail is ranked on what is known rather than sunk for what
+is not.
 
 ### Application
 

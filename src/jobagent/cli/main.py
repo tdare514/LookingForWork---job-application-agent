@@ -7,7 +7,7 @@ foundation works: initialise the data directory, show status, read the audit log
 from __future__ import annotations
 
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import typer
 from rich.console import Console
@@ -24,6 +24,7 @@ from jobagent.core.profile import load as load_stored_profile
 from jobagent.core.profile import load_file as load_profile_file
 from jobagent.core.profile import store as store_profile
 from jobagent.core.storage import Storage
+from jobagent.matching.extract import Requirements
 from jobagent.tracking.board import State, light_for
 from jobagent.tracking.repo import BoardRepo
 
@@ -544,6 +545,145 @@ def extract(
     console.print(f"\n[green]Extracted {done}[/green] posting(s) with {RULESET_VERSION}.")
     if failed:
         console.print(f"[yellow]{failed} failed[/yellow] and were skipped.")
+
+
+@app.command("score")
+def score_cmd(
+    filtered: bool = typer.Option(False, "--filtered", help="Show what the hard filters cut."),
+    explain: int = typer.Option(None, "--explain", help="One job's full decomposition."),
+) -> None:
+    """Run the hard filters and score what survives (#31).
+
+    Rule-based and free to run, so re-running after a `fetch` or an `extract` is
+    the normal thing to do. Scores are appended rather than replaced: the
+    history is what lets a later digest say a role's score moved.
+
+    The ranked table here is deliberately plain. The daily digest -- thresholds,
+    score movement, reposts, what the filters removed in aggregate -- is #32.
+    """
+    from jobagent.matching.filters import apply_filters
+    from jobagent.matching.score import score as run_score
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        profile = load_stored_profile(store)
+        if profile is None:
+            console.print("[yellow]No profile set.[/yellow] Every filter and weight reads it.")
+            console.print("Run [bold]jobagent profile set <file.yaml>[/bold] first.")
+            raise typer.Exit(code=1)
+
+        rows = repo.scoring_rows()
+        if not rows:
+            console.print("[yellow]Nothing on the board yet.[/yellow] Add or fetch a role first.")
+            return
+
+        for job_id, listing, posted_at in rows:
+            stored = repo.latest_requirements(job_id)
+            requirements = Requirements() if stored is None else Requirements.from_dict(stored)
+            verdict = apply_filters(listing, requirements, profile)
+            result = run_score(
+                listing, requirements, profile, posted_at, extracted=stored is not None
+            )
+            repo.save_score(job_id, result, verdict)
+
+        latest = repo.latest_scores()
+        cut = sum(1 for r in latest.values() if r["filtered"])
+        store.append_audit("score", {"jobs": len(rows), "filtered": cut})
+
+        if explain is not None:
+            _explain_score(repo, latest, explain)
+            return
+        if filtered:
+            _print_filtered(repo)
+            return
+        _print_ranking(repo, latest, cut)
+
+
+def _print_ranking(repo: BoardRepo, latest: dict[int, Any], cut: int) -> None:
+    ranked = sorted(
+        ((jid, rec) for jid, rec in latest.items() if not rec["filtered"]),
+        key=lambda pair: pair[1]["total"],
+        reverse=True,
+    )
+    if not ranked:
+        console.print(f"[yellow]Every row was cut by a hard filter[/yellow] ({cut}).")
+        console.print("Run [bold]jobagent score --filtered[/bold] to see which rule, and why.")
+        return
+
+    table = Table(title=f"Ranked ({len(ranked)} scored, {cut} filtered out)")
+    table.add_column("#", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Company")
+    table.add_column("Title")
+    table.add_column("Scored on", style="dim")
+
+    for position, (job_id, record) in enumerate(ranked, start=1):
+        job = repo.get(job_id)
+        if job is None:
+            continue
+        components = record["components"]
+        table.add_row(
+            str(position),
+            f"{record['total']:.2f}",
+            job.company,
+            job.title[:46],
+            f"{len(components['scored_on'])}/5 components",
+        )
+    console.print(table)
+    console.print("\n[dim]jobagent score --explain <job-id> for one row's decomposition.[/dim]")
+
+
+def _print_filtered(repo: BoardRepo) -> None:
+    rows = repo.filtered_jobs()
+    if not rows:
+        console.print("[green]Nothing was cut by a hard filter.[/green]")
+        return
+    table = Table(title=f"Filtered out ({len(rows)})")
+    table.add_column("Company")
+    table.add_column("Title")
+    table.add_column("Why it was cut")
+    for job, reason in rows:
+        table.add_row(job.company, job.title[:40], reason)
+    console.print(table)
+
+
+def _explain_score(repo: BoardRepo, latest: dict[int, Any], job_id: int) -> None:
+    record = latest.get(job_id)
+    job = repo.get(job_id)
+    if record is None or job is None:
+        console.print(f"[yellow]No score for job {job_id}.[/yellow]")
+        raise typer.Exit(code=1)
+
+    console.print(f"\n[bold]{job.company} — {job.title}[/bold]")
+    if record["filtered"]:
+        console.print(f"[red]Cut by a hard filter:[/red] {record['filter_reason']}")
+
+    payload = record["components"]
+    # The components below are the real ones -- a cut job is still scored, so
+    # that "would this have ranked well if the filter were wrong?" is answerable.
+    # The stored total is 0 because it is out of the ranking, and the title has
+    # to say which of the two numbers it is showing.
+    heading = (
+        f"Score {payload['total']:.2f} — not ranked, cut before scoring counted"
+        if record["filtered"]
+        else f"Score {payload['total']:.2f}"
+    )
+    table = Table(title=heading)
+    table.add_column("Component")
+    table.add_column("Value", justify="right")
+    table.add_column("Weight", justify="right")
+    table.add_column("Basis", style="dim")
+    for name, component in payload["components"].items():
+        value = "—" if component["value"] is None else f"{component['value']:.2f}"
+        weight = f"{component['weight']:.2f}" if component["value"] is not None else "—"
+        table.add_row(name, value, weight, component["basis"])
+    console.print(table)
+    if payload["unavailable"]:
+        console.print(
+            f"[dim]Scored on {len(payload['scored_on'])} of 5 components; "
+            f"{', '.join(payload['unavailable'])} had nothing to judge on, so the "
+            "remaining weights were rescaled.[/dim]"
+        )
 
 
 @app.command()

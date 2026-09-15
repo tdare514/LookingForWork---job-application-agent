@@ -150,6 +150,25 @@ REGISTRY: tuple[PIIField, ...] = (
         (Destination.NOWHERE,),
         RETENTION_RAW,
     ),
+    PIIField(
+        "scores",
+        "components",
+        "The score decomposition: declared intent applied to a named company. "
+        "Reading it tells you what the user is looking for and how closely each "
+        "employer matched, which is the shortlist restated per row.",
+        Sensitivity.HIGH,
+        (Destination.NOWHERE,),
+        RETENTION_POSTINGS,
+    ),
+    PIIField(
+        "scores",
+        "filter_reason",
+        "Why a role was cut. Quotes the profile back -- the compensation floor, "
+        "the blocklist, the sponsorship need -- against a named employer.",
+        Sensitivity.HIGH,
+        (Destination.NOWHERE,),
+        RETENTION_POSTINGS,
+    ),
 )
 
 
