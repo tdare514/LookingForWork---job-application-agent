@@ -32,9 +32,14 @@ def init() -> None:
     data_dir = ensure_data_dir()
     with Storage() as store:
         version = store.schema_version()
+        # Rows added before M0003 carry no dedupe key. Idempotent; a no-op after
+        # the first run. Fills the new columns and merges nothing.
+        backfilled = BoardRepo(store).backfill_normalized()
         store.append_audit("init", {"data_dir": str(data_dir), "schema_version": version})
     console.print(f"[green]Initialised[/green] {data_dir}")
     console.print(f"Schema version: {version}")
+    if backfilled:
+        console.print(f"Normalized {backfilled} existing row(s) for de-duplication.")
 
 
 @app.command()
@@ -284,6 +289,9 @@ def fetch(
     added = skipped = 0
     with Storage() as store, PoliteClient(hosts, min_interval_seconds=2.0) as client:
         repo = BoardRepo(store)
+        # Rows added before M0003 have no dedupe key, so they would look new
+        # again on the next fetch. Idempotent, and a no-op once it has run.
+        repo.backfill_normalized()
         for adapter in adapters:
             try:
                 postings = list(adapter.fetch(client, limit=limit))
@@ -302,17 +310,20 @@ def fetch(
             for posting in postings:
                 if match and match.lower() not in posting.title.lower():
                     continue
+                repo.store_raw(posting.source, posting.source_id, posting.raw)
                 _job, created = repo.add(
                     company=posting.company,
                     title=posting.title,
                     url=posting.url,
                     location=posting.location,
+                    source=posting.source,
+                    source_id=posting.source_id,
                 )
                 added += created
                 skipped += not created
             store.append_audit("fetch", {"source": adapter.name, "returned": len(postings)})
 
-    console.print(f"[green]{added} new[/green], {skipped} already tracked.")
+    console.print(f"[green]{added} new[/green], {skipped} already tracked (sighting recorded).")
     if added:
         console.print("Run [bold]jobagent board[/bold] to triage them.")
 

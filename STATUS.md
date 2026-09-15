@@ -15,9 +15,10 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 130 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 165 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
+- Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
 - `jobagent report` — funnel with denominators stated, small samples flagged, and a plain "nothing submitted yet" when that is the truth.
 - `jobagent export` / `purge` — one archive out, and a delete that verifies nothing recoverable remains.
 - Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
@@ -30,7 +31,7 @@ Nothing in flight.
 
 1. Send the RBC and BMO applications. Packages are built; the company paragraph and the "why this company" answer still need me.
 2. Rephrasing toward a posting's vocabulary, through the same truthfulness gate.
-3. Requirement extraction from posting text (#30), rule-based — what turns fetched rows into something rankable.
+3. Fetch posting descriptions and deadlines from Workday's detail endpoint, then requirement extraction (#30), rule-based.
 
 ## Known limitations
 
