@@ -159,4 +159,27 @@ M0002 = Migration(
 )
 
 
-MIGRATIONS: tuple[Migration, ...] = (M0001, M0002)
+M0003 = Migration(
+    3,
+    "canonical_dedupe_keys",
+    """
+    -- Normalized forms of the three fields de-duplication compares (#28). Stored
+    -- rather than computed per query so the index below is usable, and so a
+    -- change to the normalization rules is visible as a data change.
+    ALTER TABLE jobs ADD COLUMN title_norm    TEXT NOT NULL DEFAULT '';
+    ALTER TABLE jobs ADD COLUMN location_norm TEXT NOT NULL DEFAULT '';
+
+    -- Coarse identity: normalized company, title and city. Deliberately NOT
+    -- UNIQUE, unlike `fingerprint`. A unique constraint here would mean a
+    -- migration that silently merges rows the user already has on their board,
+    -- and merging someone's tracked applications is not a thing a schema change
+    -- should do quietly. It is consulted before an insert instead, so duplicates
+    -- are never created and existing rows are never destroyed.
+    ALTER TABLE jobs ADD COLUMN dedupe_key    TEXT NOT NULL DEFAULT '';
+    CREATE INDEX idx_jobs_dedupe ON jobs(dedupe_key);
+    CREATE INDEX idx_jobs_company_title ON jobs(company_norm, title_norm);
+    """,
+)
+
+
+MIGRATIONS: tuple[Migration, ...] = (M0001, M0002, M0003)

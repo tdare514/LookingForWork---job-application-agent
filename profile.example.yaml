@@ -1,0 +1,117 @@
+# Profile: what you are looking for.
+#
+# The resume says what happened; this says what is wanted. Every hard filter and
+# every score component in the matching pipeline reads it, so an empty field
+# here is not a blank -- it is a filter that passes everything.
+#
+#   cp profile.example.yaml ~/profile.yaml   # edit it, keep it out of the repo
+#   jobagent profile set ~/profile.yaml      # validates, then stores it
+#   jobagent profile show                    # what the agent is actually using
+#
+# The file is an import. Once stored, the database is what the agent reads, so
+# re-run `profile set` after every edit.
+
+schema_version: 1
+
+# --- What you are looking for -----------------------------------------------
+
+# Matched against posting titles. Write the words a posting would use, not a
+# job description: "Data Analyst", not "somewhere I can grow".
+target_titles:
+  - Data Analyst
+  - Business Systems Analyst
+  - Software Developer
+  - Risk Analyst
+
+# Rungs on the shared seniority ladder, independent of a source's title
+# inflation. One of: intern, junior, mid, senior, staff, lead, principal,
+# manager, director, executive.
+target_seniority:
+  - intern
+  - junior
+
+# Cities, as you would say them. Normalized on comparison, so "Toronto" also
+# matches a posting that says "TORONTO, Ontario, Canada".
+locations:
+  - Toronto
+  - Mississauga
+  - Guelph
+
+# One or more of: onsite, hybrid, remote. Listing remote means a remote posting
+# is never filtered out for being in the wrong city.
+work_arrangements:
+  - hybrid
+  - onsite
+
+# --- Skills ------------------------------------------------------------------
+
+# Required: a posting that mentions none of these is not for you. Keep it short.
+# A long must-have list scores nothing highly, because nothing matches all of it.
+must_have_skills:
+  - SQL
+  - Python
+  - Excel
+
+# Nice to have: contributes to the score, never filters.
+nice_to_have_skills:
+  - Power BI
+  - Tableau
+  - pandas
+  - Git
+
+# --- What rules a posting out ------------------------------------------------
+
+# Free text, matched against the posting body. Each one is a hard filter, so be
+# literal about what you will not do.
+deal_breakers:
+  - security clearance
+  - unpaid
+  - commission only
+
+# Companies you will not apply to. Matched on the canonical name, so listing
+# "Bank of Montreal" also blocks a posting that says "BMO Capital Markets".
+company_blocklist: []
+
+# --- Work authorization ------------------------------------------------------
+
+# Structured, because a filter needs a boolean. The sentence a portal actually
+# reads ("Canadian citizen, no sponsorship required") lives in the resume's
+# `standing` block -- one situation, two shapes, neither guessed from the other.
+work_authorization:
+  authorized_in:
+    - CA
+  needs_sponsorship: false
+
+# --- Compensation ------------------------------------------------------------
+
+# A floor, not a target, and optional. Most postings disclose nothing; that is
+# normal and never disqualifies. Omit `floor` entirely if you have no line.
+compensation:
+  floor: 22
+  currency: CAD
+
+# --- Narrative ---------------------------------------------------------------
+
+# A few sentences in your own words. Used for scoring against posting text.
+narrative: >
+  Third-year Computer Science student with three co-op terms across business
+  analysis, project coordination and backend development. Most at home turning
+  a messy operational question into a query, a small tool, and a number someone
+  can act on. Looking for a Winter 2027 term in analytics or platform work.
+
+# --- Scoring weights ---------------------------------------------------------
+
+# Relative importance, not percentages -- they are normalized on read, so
+# doubling every number changes nothing. Someone changing domains should set
+# domain_relevance near zero, and the system will not argue.
+weights:
+  skill_overlap: 0.40
+  seniority_fit: 0.20
+  domain_relevance: 0.27
+  freshness: 0.13
+  # semantic_fit stays at 0. It needs an embedding model, a metered embeddings
+  # API is out of scope under the budget constraint, and no local backend has
+  # been decided yet (#31). A non-zero value is refused rather than stored and
+  # silently ignored: a weight that does nothing produces a score that looks
+  # complete and is not.
+  semantic_fit: 0.0

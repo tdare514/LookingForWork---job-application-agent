@@ -35,11 +35,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Iterable
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from typing import Any
 
 from jobagent.discovery.adapter import RawPosting, SourceTerms
 from jobagent.discovery.http import PoliteClient
+from jobagent.discovery.text import html_to_text
 
 PAGE_SIZE = 20
 
@@ -101,6 +102,40 @@ class WorkdayAdapter:
             collected.extend(page)
             offset += len(page)
         return collected[:limit]
+
+    def detail_endpoint(self, external_path: str) -> str:
+        return f"https://{self.host}/wday/cxs/{self.tenant}/{self.site}{external_path}"
+
+    def fetch_detail(self, client: PoliteClient, posting: RawPosting) -> RawPosting:
+        """Fill in the description and deadline from the posting's own page.
+
+        The list endpoint does not carry either. `endDate` is the application
+        deadline, which is the field this whole tool is organised around -- the
+        board has had a `deadline` column since M0002 that only a human ever
+        filled in.
+
+        Returns a new RawPosting; the original is left alone so a failure here
+        costs the detail, not the row.
+        """
+        path = str(posting.raw.get("externalPath") or "")
+        if not path:
+            return posting
+        body = client.get_json(self.detail_endpoint(path))
+        if not isinstance(body, dict):
+            raise UnexpectedSchema(f"{self.name}: detail response was {type(body).__name__}")
+        info = body.get("jobPostingInfo")
+        if not isinstance(info, dict):
+            raise UnexpectedSchema(
+                f"{self.name}: detail response has no 'jobPostingInfo'. "
+                f"Keys were: {sorted(body)[:12]}"
+            )
+        return replace(
+            posting,
+            description=html_to_text(_first_str(info, "jobDescription")) or None,
+            deadline=_first_str(info, "endDate"),
+            employment_type=_first_str(info, "timeType"),
+            raw={**posting.raw, "jobPostingInfo": info},
+        )
 
     def parse_response(self, body: dict[str, Any]) -> list[RawPosting]:
         if "jobPostings" not in body:

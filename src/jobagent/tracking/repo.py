@@ -3,11 +3,20 @@
 from __future__ import annotations
 
 import hashlib
-import re
+import json
 from dataclasses import dataclass
 from typing import Any
 
 from jobagent.core.storage import Storage, utcnow
+from jobagent.matching.extract import Requirements
+from jobagent.matching.normalize import (
+    dedupe_key,
+    normalize_company,
+    normalize_location,
+    normalize_seniority,
+    normalize_title,
+    same_role,
+)
 from jobagent.tracking.board import State, rank_for
 
 
@@ -21,19 +30,40 @@ class Job:
     deadline: str | None
     state: str
     notes: str | None
+    seniority: str | None
     first_seen_at: str
     state_changed_at: str | None
 
 
-def _normalise_company(name: str) -> str:
-    cleaned = re.sub(r"[^a-z0-9 ]", "", name.lower())
-    cleaned = re.sub(r"\b(inc|ltd|llc|corp|corporation|company|co|group|bank)\b", "", cleaned)
-    return " ".join(cleaned.split())
+@dataclass(frozen=True)
+class Sighting:
+    """One time a source showed us a role.
+
+    A role reposted three times in six weeks is either a hard requisition to
+    fill or a phantom posting. Both are worth knowing before spending an evening
+    on a cover letter, and neither is visible from a single row.
+    """
+
+    source: str
+    source_id: str
+    url: str | None
+    seen_at: str
 
 
 def _fingerprint(company: str, title: str, location: str | None) -> str:
-    basis = f"{_normalise_company(company)}|{title.lower().strip()}|{(location or '').lower()}"
+    """Exact identity, kept because the column is UNIQUE and already populated.
+
+    `dedupe_key` is strictly coarser than this, and it is checked first, so an
+    insert can never reach a fingerprint collision.
+    """
+    basis = f"{normalize_company(company)}|{title.lower().strip()}|{(location or '').lower()}"
     return hashlib.sha256(basis.encode()).hexdigest()[:24]
+
+
+_JOB_COLUMNS = (
+    "id, company, title, url, location, deadline, state, notes, seniority,"
+    " first_seen_at, state_changed_at"
+)
 
 
 class BoardRepo:
@@ -48,35 +78,64 @@ class BoardRepo:
         location: str | None = None,
         deadline: str | None = None,
         state: State = State.NEW,
+        source: str = "manual",
+        source_id: str | None = None,
+        description: str | None = None,
     ) -> tuple[Job, bool]:
-        """Add an opportunity. Returns (job, created). Re-adding is a no-op."""
-        fp = _fingerprint(company, title, location)
+        """Add an opportunity. Returns (job, created).
+
+        A role already on the board is not added again -- it gains a sighting.
+        That is the whole of #28 in one method: the same posting from two
+        sources, or the same requisition reposted next term, is one job.
+        """
         now = utcnow()
-        existing = (
-            self.store.connect()
-            .execute("SELECT id FROM jobs WHERE fingerprint = ?", (fp,))
-            .fetchone()
-        )
+        key = dedupe_key(company, title, location)
+        existing = self._match(company, title, key)
+
         if existing is not None:
-            self.store.connect().execute(
-                "UPDATE jobs SET last_seen_at = ? WHERE id = ?", (now, existing["id"])
-            )
-            self.store.connect().commit()
-            job = self.get(int(existing["id"]))
-            assert job is not None
-            return job, False
+            self.record_sighting(existing.id, source, source_id or key, url, now)
+            with self.store.transaction() as conn:
+                conn.execute("UPDATE jobs SET last_seen_at = ? WHERE id = ?", (now, existing.id))
+                # Fill gaps a later sighting knows about, never overwrite. A
+                # deadline typed in by hand outranks one a fetch guessed at.
+                if description:
+                    conn.execute(
+                        "UPDATE jobs SET description = ? WHERE id = ? AND"
+                        " (description IS NULL OR description = '')",
+                        (description, existing.id),
+                    )
+                if deadline:
+                    conn.execute(
+                        "UPDATE jobs SET deadline = ? WHERE id = ? AND"
+                        " (deadline IS NULL OR deadline = '')",
+                        (deadline, existing.id),
+                    )
+                if url:
+                    conn.execute(
+                        "UPDATE jobs SET url = ? WHERE id = ? AND (url IS NULL OR url = '')",
+                        (url, existing.id),
+                    )
+            refreshed = self.get(existing.id)
+            assert refreshed is not None
+            return refreshed, False
 
         with self.store.transaction() as conn:
             cur = conn.execute(
-                "INSERT INTO jobs (fingerprint, title, company, company_norm, location, url,"
+                "INSERT INTO jobs (fingerprint, title, company, company_norm, title_norm,"
+                " location, location_norm, dedupe_key, seniority, description, url,"
                 " deadline, state, first_seen_at, last_seen_at, state_changed_at)"
-                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                " VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
-                    fp,
+                    _fingerprint(company, title, location),
                     title,
                     company,
-                    _normalise_company(company),
+                    normalize_company(company),
+                    normalize_title(title),
                     location,
+                    normalize_location(location),
+                    key,
+                    str(normalize_seniority(title, description)),
+                    description,
                     url,
                     deadline,
                     str(state),
@@ -85,28 +144,225 @@ class BoardRepo:
                     now,
                 ),
             )
+        job_id = int(cur.lastrowid or 0)
+        self.record_sighting(job_id, source, source_id or key, url, now)
         self.store.append_audit("job.add", {"company": company, "title": title})
-        job = self.get(int(cur.lastrowid or 0))
+        job = self.get(job_id)
         assert job is not None
         return job, True
+
+    def _match(self, company: str, title: str, key: str) -> Job | None:
+        """Find the job this posting already is, if any.
+
+        Two passes. The exact key collapses the cross-source and repost cases,
+        which is the overwhelming majority. The fuzzy pass exists for the one
+        real case the key misses: a source that prefixes its own department onto
+        the title, so "GRM, Counterparty Credit Risk Intern" and "Counterparty
+        Credit Risk Intern" are the same requisition spelled two ways.
+
+        The fuzzy pass is scoped to one company and one city on purpose. Across
+        companies, similar titles are the norm and merging them would be wrong
+        every time.
+        """
+        conn = self.store.connect()
+        exact = conn.execute(
+            f"SELECT {_JOB_COLUMNS} FROM jobs WHERE dedupe_key = ? ORDER BY id LIMIT 1", (key,)
+        ).fetchone()
+        if exact is not None:
+            return Job(**dict(exact))
+
+        company_norm, _, location_norm = key.split("|")
+        candidates = conn.execute(
+            f"SELECT {_JOB_COLUMNS} FROM jobs WHERE company_norm = ? AND location_norm = ?"
+            " ORDER BY id",
+            (company_norm, location_norm),
+        )
+        for row in candidates:
+            if same_role(title, row["title"]):
+                return Job(**dict(row))
+        return None
+
+    # -- sightings ---------------------------------------------------------
+
+    def record_sighting(
+        self,
+        job_id: int,
+        source: str,
+        source_id: str,
+        url: str | None = None,
+        seen_at: str | None = None,
+    ) -> bool:
+        """Record that a source showed this role. One sighting per source per day.
+
+        Re-running `fetch` twice on a Tuesday is a thing people do. It should not
+        invent two sightings and make a stable posting look like it is being
+        aggressively reposted.
+        """
+        stamp = seen_at or utcnow()
+        day = stamp[:10]
+        conn = self.store.connect()
+        already = conn.execute(
+            "SELECT 1 FROM job_sightings WHERE job_id = ? AND source = ? AND source_id = ?"
+            " AND substr(seen_at, 1, 10) = ?",
+            (job_id, source, source_id, day),
+        ).fetchone()
+        if already is not None:
+            return False
+        with self.store.transaction() as txn:
+            txn.execute(
+                "INSERT INTO job_sightings (job_id, source, source_id, url, seen_at)"
+                " VALUES (?, ?, ?, ?, ?)",
+                (job_id, source, source_id, url, stamp),
+            )
+        return True
+
+    def sightings(self, job_id: int) -> list[Sighting]:
+        rows = self.store.connect().execute(
+            "SELECT source, source_id, url, seen_at FROM job_sightings WHERE job_id = ?"
+            " ORDER BY seen_at",
+            (job_id,),
+        )
+        return [Sighting(**dict(r)) for r in rows]
+
+    def sighting_counts(self) -> dict[int, int]:
+        """How many times each job has been seen. Reposts are signal."""
+        rows = self.store.connect().execute(
+            "SELECT job_id, COUNT(*) c FROM job_sightings GROUP BY job_id"
+        )
+        return {int(r["job_id"]): int(r["c"]) for r in rows}
+
+    def store_raw(self, source: str, source_id: str, body: dict[str, Any]) -> None:
+        """Keep the unparsed payload so a mapping bug is fixable without re-fetching.
+
+        Registered in the PII registry at 30 days. #58 is exactly why this
+        exists: the mapping was wrong twice and the fix needed the real shape.
+
+        One payload per source per day, for the same reason sightings are capped
+        that way: fetching twice on a Tuesday should not double the table. The
+        30-day retention bounds it, but an unbounded write every run makes the
+        window meaningless.
+        """
+        today = utcnow()[:10]
+        conn = self.store.connect()
+        already = conn.execute(
+            "SELECT 1 FROM raw_payloads WHERE source = ? AND source_id = ?"
+            " AND substr(fetched_at, 1, 10) = ?",
+            (source, source_id, today),
+        ).fetchone()
+        if already is not None:
+            return
+        with self.store.transaction() as txn:
+            txn.execute(
+                "INSERT INTO raw_payloads (source, source_id, body, fetched_at)"
+                " VALUES (?, ?, ?, ?)",
+                (source, source_id, json.dumps(body, default=str), utcnow()),
+            )
+
+    # -- extracted requirements -------------------------------------------
+
+    def save_requirements(self, job_id: int, requirements: Requirements) -> None:
+        """Store one extraction, stamped with the ruleset that produced it.
+
+        `prompt_version` in M0001 assumed an LLM. It holds a ruleset version
+        instead (ADR 0008), which is the same idea doing the same job: a quality
+        change has to be traceable to a rule change, or the evaluation harness
+        cannot tell improvement from drift.
+        """
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT INTO job_requirements (job_id, payload, prompt_version, extracted_at)"
+                " VALUES (?, ?, ?, ?)",
+                (
+                    job_id,
+                    json.dumps(requirements.as_dict()),
+                    requirements.ruleset_version,
+                    utcnow(),
+                ),
+            )
+        # Fields the canonical job row owns, filled only where it is silent.
+        with self.store.transaction() as conn:
+            if requirements.compensation_min is not None:
+                conn.execute(
+                    "UPDATE jobs SET compensation_min = ?, compensation_max = ?, currency = ?"
+                    " WHERE id = ? AND compensation_min IS NULL",
+                    (
+                        requirements.compensation_min,
+                        requirements.compensation_max,
+                        requirements.currency,
+                        job_id,
+                    ),
+                )
+            if requirements.work_arrangement:
+                conn.execute(
+                    "UPDATE jobs SET work_arrangement = ? WHERE id = ?"
+                    " AND (work_arrangement IS NULL OR work_arrangement = '')",
+                    (requirements.work_arrangement, job_id),
+                )
+            if requirements.application_deadline:
+                conn.execute(
+                    "UPDATE jobs SET deadline = ? WHERE id = ?"
+                    " AND (deadline IS NULL OR deadline = '')",
+                    (requirements.application_deadline, job_id),
+                )
+
+    def latest_requirements(self, job_id: int) -> dict[str, Any] | None:
+        row = (
+            self.store.connect()
+            .execute(
+                "SELECT payload FROM job_requirements WHERE job_id = ? ORDER BY id DESC LIMIT 1",
+                (job_id,),
+            )
+            .fetchone()
+        )
+        if row is None:
+            return None
+        loaded: dict[str, Any] = json.loads(row["payload"])
+        return loaded
+
+    def jobs_with_descriptions(self) -> list[tuple[int, str]]:
+        rows = self.store.connect().execute(
+            "SELECT id, description FROM jobs WHERE description IS NOT NULL AND description != ''"
+        )
+        return [(int(r["id"]), str(r["description"])) for r in rows]
+
+    def backfill_normalized(self) -> int:
+        """Populate the normalized columns for rows that predate M0003.
+
+        Idempotent and non-destructive: it fills the new columns and touches
+        nothing else. Rows that are now revealed to be duplicates of each other
+        are deliberately left alone -- merging board rows the user has been
+        tracking is their call, not a migration's.
+        """
+        conn = self.store.connect()
+        rows = conn.execute(
+            "SELECT id, company, title, location, description FROM jobs WHERE dedupe_key = ''"
+        ).fetchall()
+        for row in rows:
+            with self.store.transaction() as txn:
+                txn.execute(
+                    "UPDATE jobs SET company_norm = ?, title_norm = ?, location_norm = ?,"
+                    " dedupe_key = ?, seniority = COALESCE(seniority, ?) WHERE id = ?",
+                    (
+                        normalize_company(row["company"]),
+                        normalize_title(row["title"]),
+                        normalize_location(row["location"]),
+                        dedupe_key(row["company"], row["title"], row["location"]),
+                        str(normalize_seniority(row["title"], row["description"])),
+                        row["id"],
+                    ),
+                )
+        return len(rows)
 
     def get(self, job_id: int) -> Job | None:
         row = (
             self.store.connect()
-            .execute(
-                "SELECT id, company, title, url, location, deadline, state, notes,"
-                " first_seen_at, state_changed_at FROM jobs WHERE id = ?",
-                (job_id,),
-            )
+            .execute(f"SELECT {_JOB_COLUMNS} FROM jobs WHERE id = ?", (job_id,))
             .fetchone()
         )
         return None if row is None else Job(**dict(row))
 
     def all(self, include_closed: bool = True) -> list[Job]:
-        rows = self.store.connect().execute(
-            "SELECT id, company, title, url, location, deadline, state, notes,"
-            " first_seen_at, state_changed_at FROM jobs"
-        )
+        rows = self.store.connect().execute(f"SELECT {_JOB_COLUMNS} FROM jobs")
         jobs = [Job(**dict(r)) for r in rows]
         if not include_closed:
             jobs = [j for j in jobs if j.state not in {State.REJECTED, State.SKIPPED}]

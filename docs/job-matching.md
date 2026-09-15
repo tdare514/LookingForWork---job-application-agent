@@ -47,12 +47,25 @@ spending an evening on a cover letter.
 ### 4. Extract
 
 Structured requirements out of free text: required and preferred skills, years
-of experience, seniority signals, compensation when stated in the body rather
-than a field, visa sponsorship language, and work arrangement when it
-contradicts the structured field (it often does).
+of experience, compensation when stated in the body rather than a field, visa
+sponsorship language, the closing date, and work arrangement when it contradicts
+the structured field (it often does).
 
-Extraction is evaluated against a hand-labeled fixture set. Without that, a
-prompt change silently degrades every downstream score.
+**Rule-based, not a model call.** ADR 0008 records why: the budget constraint
+rules out a metered API in the core loop, so the LLM boundary this step was
+originally specified against does not exist. Each extraction is stamped with a
+ruleset version, which does the job the prompt version was meant to do — a
+quality change has to be traceable to a rule change.
+
+The section classifier is the part that matters. A posting's requirement bullets
+and its *benefit* bullets are both bulleted lists, adjacent and identically
+formatted; reading "Leaders who support your development" as a requirement would
+poison every score downstream. Headings are classified explicitly and anything
+unrecognised contributes nothing.
+
+Extraction is evaluated against a hand-labeled fixture set of real postings, with
+per-field precision and recall enforced in CI. Without that, a rule change that
+silently degrades every downstream score looks exactly like one that does not.
 
 ### 5. Hard filters
 

@@ -133,6 +133,16 @@ REGISTRY: tuple[PIIField, ...] = (
         RETENTION_AUDIT,
     ),
     PIIField(
+        "jobs",
+        "description",
+        "Posting text as the employer published it. Third-party content, not "
+        "personal data -- but it is the input to extraction, and purge walks "
+        "this registry, so an unregistered column is one purge does not clear.",
+        Sensitivity.LOW,
+        (Destination.NOWHERE,),
+        RETENTION_POSTINGS,
+    ),
+    PIIField(
         "raw_payloads",
         "body",
         "Unparsed source responses, kept only so a mapping bug is fixable without re-fetching.",

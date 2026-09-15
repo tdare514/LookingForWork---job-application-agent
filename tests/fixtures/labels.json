@@ -1,0 +1,187 @@
+{
+  "_README": [
+    "Hand-labelled ground truth for the extraction eval (#30).",
+    "Every value here was read off the posting text by a human-equivalent pass over",
+    "tests/fixtures/postings.json, NOT copied from the extractor's output. That",
+    "distinction is the whole point: labels derived from the thing under test",
+    "measure nothing. Where the extractor disagrees with a label below, the label",
+    "is what the posting says and the extractor is wrong.",
+    "",
+    "null means the posting does not state the field. It never means 'no'.",
+    "",
+    "INCOMPLETE: #30 asks for at least 50 postings. This is 12. Labelling the rest",
+    "is a judgement about this job search and belongs to its owner, not to me.",
+    "",
+    "CORRECTION (same session): R_1499215 and R_1499218 were first labelled from",
+    "raw text proximity, which put the wrong years against 'required'. TD posts",
+    "several levels in one requisition: '0 to 1 year' sits under 'Preferred",
+    "Qualifications:' and '3+ years relevant experience' under 'Education &",
+    "Experience:'. The required floor is the latter. The labels below were",
+    "corrected against the section headings, not against the extractor's output."
+  ],
+  "R-0000186717": {
+    "deadline": "2026-09-20",
+    "comp": [
+      null,
+      null,
+      null
+    ],
+    "years": [
+      null,
+      null
+    ],
+    "arrangement": "hybrid",
+    "note": "Prose says 20 Sept; the label says 21 Sept with a 'day prior' note. Both mean the 20th."
+  },
+  "R-0000183468": {
+    "deadline": "2026-10-14",
+    "comp": [
+      110000,
+      110000,
+      null
+    ],
+    "years": [
+      null,
+      null
+    ],
+    "arrangement": null,
+    "note": "Single figure, not a band: 'expected salary range for the above position is $110,000'."
+  },
+  "R-0000187520": {
+    "deadline": "2026-09-20",
+    "comp": [
+      null,
+      null,
+      null
+    ],
+    "years": [
+      null,
+      null
+    ],
+    "arrangement": "hybrid",
+    "note": "'2+ years' appears under Nice-to-have, so the REQUIRED years are unstated."
+  },
+  "R-0000187859": {
+    "deadline": null,
+    "comp": [
+      110000,
+      110000,
+      null
+    ],
+    "years": [
+      null,
+      null
+    ],
+    "arrangement": null,
+    "note": "The Application Deadline label is present but carries no date."
+  },
+  "R260025276": {
+    "deadline": "2026-09-24",
+    "comp": [
+      85500,
+      185000,
+      null
+    ],
+    "years": [
+      7,
+      7
+    ],
+    "arrangement": null,
+    "note": "No currency token on the pay line; the band is unlabelled."
+  },
+  "R260026107": {
+    "deadline": "2026-09-29",
+    "comp": [
+      70000,
+      150000,
+      null
+    ],
+    "years": [
+      5,
+      7
+    ],
+    "arrangement": null
+  },
+  "R260026756": {
+    "deadline": "2026-09-21",
+    "comp": [
+      65000,
+      140000,
+      null
+    ],
+    "years": [
+      4,
+      6
+    ],
+    "arrangement": null
+  },
+  "R260026119": {
+    "deadline": "2026-10-12",
+    "comp": [
+      275000,
+      275000,
+      "USD"
+    ],
+    "years": [
+      10,
+      10
+    ],
+    "arrangement": null,
+    "note": "'base salary for this role is $275,000 USD'; the Salary: label itself is empty."
+  },
+  "R_1468577": {
+    "deadline": null,
+    "comp": [
+      45700,
+      61000,
+      "CAD"
+    ],
+    "years": [
+      null,
+      null
+    ],
+    "arrangement": "hybrid",
+    "note": "Bilingual pay line: '45 700 $/$45,700 - 61 000 $/$61,000 CAD'."
+  },
+  "R_1499215": {
+    "deadline": null,
+    "comp": [
+      76290,
+      114440,
+      "USD"
+    ],
+    "years": [
+      3,
+      3
+    ],
+    "arrangement": "onsite",
+    "note": "'0 to 1 year' is under 'Preferred Qualifications:'; the required floor is '3+ years relevant experience' under 'Education & Experience:'."
+  },
+  "R_1499218": {
+    "deadline": null,
+    "comp": [
+      96130,
+      144190,
+      "USD"
+    ],
+    "years": [
+      5,
+      5
+    ],
+    "arrangement": "onsite",
+    "note": "Same shape as R_1499215: '2 to 3+ years' is preferred, '5+ years relevant experience' is the required floor."
+  },
+  "R_1508330": {
+    "deadline": null,
+    "comp": [
+      45700,
+      61000,
+      "CAD"
+    ],
+    "years": [
+      null,
+      null
+    ],
+    "arrangement": "hybrid"
+  }
+}

@@ -7,6 +7,7 @@ foundation works: initialise the data directory, show status, read the audit log
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -18,9 +19,18 @@ from jobagent.application.resume import load as load_resume
 from jobagent.application.tailor import Posting
 from jobagent.core.paths import default_data_dir, ensure_data_dir
 from jobagent.core.pii import REGISTRY
+from jobagent.core.profile import Profile
+from jobagent.core.profile import load as load_stored_profile
+from jobagent.core.profile import load_file as load_profile_file
+from jobagent.core.profile import store as store_profile
 from jobagent.core.storage import Storage
 from jobagent.tracking.board import State, light_for
 from jobagent.tracking.repo import BoardRepo
+
+if TYPE_CHECKING:  # Imported lazily at runtime; the CLI keeps its startup cheap.
+    from jobagent.discovery.adapter import RawPosting
+    from jobagent.discovery.http import PoliteClient
+    from jobagent.discovery.workday import WorkdayAdapter
 
 app = typer.Typer(help="Personal, human-in-the-loop job application agent.", no_args_is_help=True)
 console = Console()
@@ -32,9 +42,14 @@ def init() -> None:
     data_dir = ensure_data_dir()
     with Storage() as store:
         version = store.schema_version()
+        # Rows added before M0003 carry no dedupe key. Idempotent; a no-op after
+        # the first run. Fills the new columns and merges nothing.
+        backfilled = BoardRepo(store).backfill_normalized()
         store.append_audit("init", {"data_dir": str(data_dir), "schema_version": version})
     console.print(f"[green]Initialised[/green] {data_dir}")
     console.print(f"Schema version: {version}")
+    if backfilled:
+        console.print(f"Normalized {backfilled} existing row(s) for de-duplication.")
 
 
 @app.command()
@@ -155,6 +170,100 @@ def resume_validate(
         )
 
 
+profile_app = typer.Typer(help="What you are looking for.", no_args_is_help=True)
+app.add_typer(profile_app, name="profile")
+
+
+def _load_profile_or_exit(path: Path | None, *, about_to_store: bool) -> Profile:
+    """Load a profile file, or report why not and stop.
+
+    Shared by `validate` and `set` so the two cannot drift into describing the
+    same bad file differently -- which is the whole point of having a validate
+    command you trust before you store anything.
+    """
+    target = path or (default_data_dir() / "profile.yaml")
+    try:
+        return load_profile_file(target)
+    except FileNotFoundError:
+        console.print(f"[red]No profile at[/red] {target}")
+        console.print("Start from the example: [bold]cp profile.example.yaml[/bold] " + str(target))
+        raise typer.Exit(code=1) from None
+    except Exception as exc:  # pydantic and the secret guard both name the field
+        console.print(f"[red]Invalid profile[/red] at {target}:\n{exc}")
+        if about_to_store:
+            console.print("[dim]Nothing was stored.[/dim]")
+        raise typer.Exit(code=1) from None
+
+
+@profile_app.command("validate")
+def profile_validate(
+    path: Path = typer.Argument(None, help="Defaults to <data dir>/profile.yaml."),
+) -> None:
+    """Check a profile file without storing it."""
+    profile = _load_profile_or_exit(path, about_to_store=False)
+    console.print("[green]Profile valid[/green]")
+    _print_profile(profile, stored=False)
+
+
+@profile_app.command("set")
+def profile_set(
+    path: Path = typer.Argument(None, help="Defaults to <data dir>/profile.yaml."),
+) -> None:
+    """Validate a profile file and store it. This is what the agent then reads."""
+    profile = _load_profile_or_exit(path, about_to_store=True)
+    with Storage() as store:
+        store_profile(store, profile)
+    console.print(f"[green]Profile stored[/green] — schema v{profile.schema_version}")
+    _print_profile(profile, stored=True)
+
+
+@profile_app.command("show")
+def profile_show() -> None:
+    """What the agent is actually using, read back from the database."""
+    with Storage() as store:
+        profile = load_stored_profile(store)
+    if profile is None:
+        console.print("[yellow]No profile stored.[/yellow]")
+        console.print("Set one with [bold]jobagent profile set <file>[/bold].")
+        raise typer.Exit(code=1)
+    _print_profile(profile, stored=True)
+
+
+def _print_profile(profile: Profile, *, stored: bool) -> None:
+    """Summarise a profile. Compensation and work authorization are named, not
+    printed: they are the two highest-sensitivity fields in the dossier, and a
+    terminal is a place people screen-share."""
+    table = Table(title="Profile" + ("" if stored else " (not stored)"))
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Titles", ", ".join(profile.target_titles))
+    table.add_row("Seniority", ", ".join(s.value for s in profile.target_seniority))
+    table.add_row("Locations", ", ".join(profile.locations))
+    table.add_row("Arrangements", ", ".join(profile.work_arrangements))
+    table.add_row("Must have", ", ".join(profile.must_have_skills))
+    table.add_row("Nice to have", ", ".join(profile.nice_to_have_skills) or "—")
+    table.add_row("Deal-breakers", ", ".join(profile.deal_breakers) or "—")
+    table.add_row("Blocked companies", str(len(profile.company_blocklist)))
+    table.add_row(
+        "Compensation floor",
+        "set" if profile.compensation.floor is not None else "none stated",
+    )
+    table.add_row(
+        "Sponsorship needed",
+        "yes" if profile.work_authorization.needs_sponsorship else "no",
+    )
+    console.print(table)
+
+    weights = Table(title="Scoring weights — normalized")
+    weights.add_column("Component")
+    weights.add_column("Share", justify="right")
+    for name, share in profile.weights.normalized().items():
+        label = name.replace("_", " ")
+        note = " [dim](no backend yet — #31)[/]" if name == "semantic_fit" else ""
+        weights.add_row(label + note, f"{share:.0%}")
+    console.print(weights)
+
+
 @app.command()
 def draft(
     job_id: int = typer.Argument(..., help="Board row to draft for (see `jobagent list`)."),
@@ -264,6 +373,12 @@ def fetch(
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Max postings to pull."),
     match: str = typer.Option(None, "--match", "-m", help="Only keep titles containing this text."),
+    details: bool = typer.Option(
+        False,
+        "--details",
+        help="Also fetch each posting's description and closing date. One extra "
+        "request per posting, so it is slower.",
+    ),
 ) -> None:
     """Pull postings from a source onto the board.
 
@@ -281,9 +396,12 @@ def fetch(
         raise typer.Exit(code=1)
 
     hosts = {h for a in adapters for h in a.hosts}
-    added = skipped = 0
+    added = skipped = deadlines_found = detail_failures = 0
     with Storage() as store, PoliteClient(hosts, min_interval_seconds=2.0) as client:
         repo = BoardRepo(store)
+        # Rows added before M0003 have no dedupe key, so they would look new
+        # again on the next fetch. Idempotent, and a no-op once it has run.
+        repo.backfill_normalized()
         for adapter in adapters:
             try:
                 postings = list(adapter.fetch(client, limit=limit))
@@ -299,22 +417,133 @@ def fetch(
                 console.print(f"[red]{adapter.name} returned an unexpected shape:[/red] {exc}")
                 continue
 
-            for posting in postings:
-                if match and match.lower() not in posting.title.lower():
-                    continue
+            kept = [p for p in postings if not match or match.lower() in p.title.lower()]
+            if details and kept:
+                console.print(
+                    f"[dim]Fetching {len(kept)} description(s) from {adapter.name}...[/dim]"
+                )
+
+            for posting in kept:
+                if details:
+                    posting, failed = _with_detail(adapter, client, posting)
+                    detail_failures += failed
+                repo.store_raw(posting.source, posting.source_id, posting.raw)
                 _job, created = repo.add(
                     company=posting.company,
                     title=posting.title,
                     url=posting.url,
                     location=posting.location,
+                    source=posting.source,
+                    source_id=posting.source_id,
+                    description=posting.description,
+                    deadline=posting.deadline,
                 )
                 added += created
                 skipped += not created
+                deadlines_found += bool(posting.deadline)
             store.append_audit("fetch", {"source": adapter.name, "returned": len(postings)})
 
-    console.print(f"[green]{added} new[/green], {skipped} already tracked.")
+    console.print(f"[green]{added} new[/green], {skipped} already tracked (sighting recorded).")
+    if deadlines_found:
+        console.print(f"{deadlines_found} posting(s) carried a closing date.")
+    if detail_failures:
+        console.print(
+            f"[yellow]{detail_failures} description(s) could not be fetched.[/yellow] "
+            "The rows are on the board without them."
+        )
     if added:
         console.print("Run [bold]jobagent board[/bold] to triage them.")
+
+
+def _with_detail(
+    adapter: WorkdayAdapter, client: PoliteClient, posting: RawPosting
+) -> tuple[RawPosting, int]:
+    """Fetch one posting's detail, tolerating failure.
+
+    A tenant refusing the detail endpoint is a stop signal for the whole adapter
+    and is re-raised. Anything else -- a shape we did not expect, one posting
+    withdrawn between the list call and this one -- costs that description and
+    nothing more. Losing the run over one bad posting would be worse than losing
+    the field.
+    """
+    from jobagent.discovery.http import SourceDeclined
+
+    try:
+        return adapter.fetch_detail(client, posting), 0
+    except SourceDeclined:
+        raise
+    except Exception:
+        return posting, 1
+
+
+@app.command()
+def extract(
+    job_id: int = typer.Argument(None, help="One job, or omit for every job with a description."),
+    show: bool = typer.Option(False, "--show", help="Print what was extracted."),
+) -> None:
+    """Pull structured requirements out of stored posting text.
+
+    Rule-based and free to run. Re-running is safe: extractions are appended, so
+    the history of what each ruleset version found stays intact.
+    """
+    from jobagent.matching.extract import RULESET_VERSION
+    from jobagent.matching.extract import extract as run_extract
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        targets = repo.jobs_with_descriptions()
+        if job_id is not None:
+            targets = [(jid, text) for jid, text in targets if jid == job_id]
+            if not targets:
+                console.print(
+                    f"[yellow]Job {job_id} has no stored description.[/yellow] "
+                    "Run `jobagent fetch <source> --details` first."
+                )
+                raise typer.Exit(code=1)
+
+        if not targets:
+            console.print("[yellow]No postings have descriptions yet.[/yellow]")
+            console.print("Run [bold]jobagent fetch <source> --details[/bold] to pull them.")
+            return
+
+        done = failed = 0
+        for jid, text in targets:
+            try:
+                requirements = run_extract(text)
+            except Exception as exc:  # one bad posting must not abort the run (#30)
+                console.print(f"[yellow]Job {jid} could not be extracted:[/yellow] {exc}")
+                failed += 1
+                continue
+            repo.save_requirements(jid, requirements)
+            done += 1
+            if show:
+                job = repo.get(jid)
+                console.print(
+                    f"\n[bold]{job.company if job else jid} — {job.title if job else ''}[/bold]"
+                )
+                console.print(f"  required : {', '.join(requirements.required_skills) or '—'}")
+                console.print(f"  preferred: {', '.join(requirements.preferred_skills) or '—'}")
+                years = (
+                    f"{requirements.min_years}-{requirements.max_years}"
+                    if requirements.min_years is not None
+                    else "—"
+                )
+                band = (
+                    f"{requirements.compensation_min:,}-{requirements.compensation_max:,}"
+                    f" {requirements.currency or ''}".strip()
+                    if requirements.compensation_min is not None
+                    else "not stated"
+                )
+                console.print(f"  years    : {years}    pay: {band}")
+                console.print(
+                    f"  closes   : {requirements.application_deadline or '—'}"
+                    f"    arrangement: {requirements.work_arrangement or '—'}"
+                )
+        store.append_audit("extract", {"jobs": done, "ruleset": RULESET_VERSION})
+
+    console.print(f"\n[green]Extracted {done}[/green] posting(s) with {RULESET_VERSION}.")
+    if failed:
+        console.print(f"[yellow]{failed} failed[/yellow] and were skipped.")
 
 
 @app.command()
