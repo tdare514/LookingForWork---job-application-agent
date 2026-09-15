@@ -6,24 +6,34 @@ the same call the browser makes when you page through listings:
     POST https://{tenant}.wd{N}.myworkdayjobs.com/wday/cxs/{tenant}/{site}/jobs
 
 That is the site's own public API, not scraped HTML and not a bypass of
-anything. It matters here because RBC, BMO, Scotiabank and TD all run Workday,
-and they are the employers this tool exists to chase.
+anything. It matters here because RBC, BMO and TD run Workday, and they are
+among the employers this tool exists to chase.
 
 If a tenant fronts that endpoint with bot protection it will answer 401 or 403,
 and PoliteClient raises rather than retrying. That is the correct outcome: the
 source declined, so we use a different route (the Claude in Chrome handoff)
 rather than arguing with it.
 
-**The field mapping below is written against Workday's documented CXS response
-shape and has NOT been verified against a live tenant from this environment --
-outbound network access is blocked here.** Rather than let a wrong assumption
-produce silently mismapped rows, `parse_response` validates hard and raises with
-the offending payload's keys named. A loud failure on first run is recoverable;
-a board quietly full of rows titled "None" is not.
+Verified against live tenants on 2026-09-15 (see #57). RBC, BMO and TD each
+answered 200 with the documented shape: top-level `facets` / `jobPostings` /
+`total` / `userAuthenticated`, and postings carrying `title`, `externalPath`,
+`locationsText`, `postedOn` and `bulletFields`. The constructed posting URLs
+resolve. An earlier 403 recorded here came from the build container's proxy,
+not from a tenant.
+
+Reachability is not permission. A 200 says the endpoint answered; it says
+nothing about whether the terms allow automated access, so `terms` still reads
+`unverified` and that is not an oversight.
+
+`parse_response` still validates hard and raises with the offending payload's
+keys named, because the shape is verified as of one date, not guaranteed for
+the next one. A loud failure is recoverable; a board quietly full of rows
+titled "None" is not.
 """
 
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
@@ -118,10 +128,7 @@ class WorkdayAdapter:
             out.append(
                 RawPosting(
                     source=self.name,
-                    # externalPath ends in the requisition id and is stable;
-                    # bulletFields is where Workday usually repeats it, but not
-                    # every tenant populates it, so the path is the safer key.
-                    source_id=str(path).rsplit("_", 1)[-1] or str(path),
+                    source_id=_requisition_id(entry, str(path)),
                     title=str(title),
                     company=self.company,
                     location=_first_str(entry, "locationsText", "locations"),
@@ -133,6 +140,47 @@ class WorkdayAdapter:
         return out
 
 
+# Workday appends "-1", "-2", ... to the path of a requisition that has been
+# reposted. Live RBC pages carry it on roughly a third of rows.
+#
+# Bounded to one or two digits on purpose. RBC ids are themselves "R-0000186717"
+# -- a greedy `-\d+$` strips the id down to "R". Two digits is more repost
+# counter than any real posting needs, and erring short is the safe direction:
+# a missed strip leaves two rows to merge by hand, an over-eager one silently
+# fuses two different requisitions.
+_REPOST_SUFFIX = re.compile(r"-\d{1,2}$")
+
+
+def _requisition_id(entry: dict[str, Any], path: str) -> str:
+    """The stable id for a posting, preferring what the tenant states outright.
+
+    `bulletFields[0]` is the requisition id on every live tenant checked, and it
+    is the only source that survives two things the path does not:
+
+    - **Underscores inside the id.** TD's ids look like `R_1468577`, so taking
+      the path's last underscore-delimited segment yields `1468577` and drops
+      the prefix.
+    - **Reposts.** A reposted requisition gets `-1` appended to its path while
+      `bulletFields` keeps the original id. Deriving from the path would make a
+      repost look like a different job, which is exactly the case #28 has to
+      collapse into one job with two sightings.
+
+    Not every tenant populates `bulletFields`, so the path remains the fallback
+    -- with the repost suffix stripped, so at least reposts still collapse.
+    """
+    bullets = entry.get("bulletFields")
+    if isinstance(bullets, list) and bullets:
+        first = bullets[0]
+        if isinstance(first, str) and first.strip():
+            return first.strip()
+    tail = path.rsplit("/", 1)[-1].rsplit("_", 1)[-1]
+    trimmed = _REPOST_SUFFIX.sub("", tail)
+    # If trimming left nothing identifying behind, the match was part of the id.
+    if trimmed and any(c.isdigit() for c in trimmed):
+        return trimmed
+    return tail or path
+
+
 def _first_str(entry: dict[str, Any], *keys: str) -> str | None:
     for key in keys:
         value = entry.get(key)
@@ -141,8 +189,8 @@ def _first_str(entry: dict[str, Any], *keys: str) -> str | None:
     return None
 
 
-# The four Canadian banks this tool actually targets. Tenants are configured
-# independently, so one declining says nothing about the others.
+# The Canadian banks this tool targets that actually run Workday. Tenants are
+# configured independently, so one declining says nothing about the others.
 RBC = WorkdayAdapter(
     name="workday:rbc",
     company="RBC",
@@ -157,13 +205,12 @@ BMO = WorkdayAdapter(
     site="External",
     host="bmo.wd3.myworkdayjobs.com",
 )
-SCOTIABANK = WorkdayAdapter(
-    name="workday:scotiabank",
-    company="Scotiabank",
-    tenant="scotiabank",
-    site="Scotiabank_Careers",
-    host="scotiabank.wd3.myworkdayjobs.com",
-)
+# Scotiabank is deliberately absent. It is not on Workday: jobs.scotiabank.com
+# runs SAP SuccessFactors (hcm17.sapsf.com) and the page carries no Workday
+# reference, which is why every candidate `scotiabank.wd3` site slug returns an
+# identical empty-message 422 -- the tenant does not exist. No slug fixes that.
+# Scotiabank closes 2026-10-02; the Claude in Chrome handoff is its route until
+# a SuccessFactors adapter earns its place.
 TD = WorkdayAdapter(
     name="workday:td",
     company="TD",
@@ -172,4 +219,4 @@ TD = WorkdayAdapter(
     host="td.wd3.myworkdayjobs.com",
 )
 
-ALL: tuple[WorkdayAdapter, ...] = (RBC, BMO, SCOTIABANK, TD)
+ALL: tuple[WorkdayAdapter, ...] = (RBC, BMO, TD)
