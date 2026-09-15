@@ -8,5 +8,5 @@ For development:
 
 - use synthetic fixtures;
 - keep secrets out of Git and logs;
-- follow the controls in [docs/SECURITY-PRIVACY.md](docs/SECURITY-PRIVACY.md);
+- follow the controls in [docs/security-privacy.md](docs/security-privacy.md);
 - report suspected application-submission or email-send bypasses as security issues, not ordinary feature requests.
