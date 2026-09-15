@@ -16,7 +16,7 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 298 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 313 tests pass; 1 ranking test is skipped because the corpus has no borderline label. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
@@ -44,6 +44,7 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 - A 401/403 from a tenant is treated as a refusal and stops that adapter, with the Claude in Chrome handoff as the fallback. No circumvention.
 - **Semantic fit does not ship and the profile refuses a non-zero weight for it.** It needs an embedding model; a metered embeddings API is out of scope and no local backend has been chosen. It is recorded in every decomposition as explicitly unavailable rather than silently ignored.
 - Scoring totals are strictly comparable only between postings measured on the same components. Every score records which ones those were, and `jobagent score` prints the count per row — a row scored on 2 of 5 is a thinner judgement than one scored on 4.
+- Location filtering resolves missing or placeholder locations from explicit `Work Location: city, region, country` lines in descriptions. Ambiguous formats remain unknown; the Wilmington fixture is now cut for location.
 - Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
 - No `--json` output and no global flags (`--config`, `--data-dir`, `--verbose`). Every command prints a Rich table, so nothing composes — no piping into `jq`. The data directory is settable only through `JOBAGENT_DATA_DIR`. Four phases landed without the surface #26 meant to fix early, so retrofitting it now spans nineteen commands.

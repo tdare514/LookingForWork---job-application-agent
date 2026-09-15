@@ -33,8 +33,8 @@
       "why": "Same shape and season -- an RBC Winter 2027 internship in Toronto. The skill match is weaker than the credit risk posting, and it should rank below it, but a Toronto co-op posting in the target term is never a skip."
     },
     "R_1499218": {
-      "label": "borderline",
-      "why": "Quantitative analytics and stress testing model development is an exact domain match, and the posting carries no level marker. But it is not advertised as a student role, so whether it is open to a co-op term is unstated. Genuinely arguable, which is the point of the label."
+      "filtered_by": "location",
+      "why": "The location field is a placeholder, but the description explicitly states Work Location: Wilmington, Delaware, United States of America. Outside the Toronto search."
     },
     "R_1508330": {
       "label": "skip",
@@ -70,7 +70,7 @@
     },
     "R_1499215": {
       "filtered_by": "seniority",
-      "why": "Senior Quantitative Analyst -- two rungs from junior, and a genuinely different job from the Specialist posting above it that is left in."
+      "why": "Senior Quantitative Analyst, two rungs from junior. The description also states Wilmington, but seniority is checked first."
     }
   }
 }

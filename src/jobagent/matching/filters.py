@@ -40,13 +40,30 @@ from jobagent.matching.normalize import (
 # job, not a stretch. One rung is the stretch; two is a career change.
 MAX_SENIORITY_DISTANCE = 1
 
-# Location strings that are a source's placeholder rather than a place. TD posts
-# "2 Locations" in the city field for any role open in more than one office, and
-# Workday writes "Multiple Locations" for the same thing. Normalized, these read
-# as a city that matches nothing, so the location filter cut a Toronto-eligible
-# quant role for being "in 2 Locations" -- a cut caused entirely by the source's
-# formatting. They mean the city is unstated, which is a pass, not a mismatch.
+# A placeholder carries no city; an explicit Work Location field in the body
+# can supply it. Unlabelled mentions (for example an employer's headquarters)
+# must not become the job's location.
 _PLACEHOLDER_LOCATION = re.compile(r"^(\d+|multiple|various|several)\s+locations?$")
+_WORK_LOCATION = re.compile(r"^[ \t]*Work Location:[ \t]*(?:\n[ \t]*)?([^\n]+)", re.I | re.M)
+_SINGLE_LOCATION = re.compile(
+    r"^[^,:;/\n]+,[^,:;/\n]+,\s*(?:Canada|United States(?: of America)?|USA)\s*$",
+    re.I,
+)
+
+
+def _body_locations(description: str | None) -> list[str]:
+    """Read labelled city/region/country lines, declining ambiguous formats.
+
+    Multiple labelled locations are alternatives. If any is unreadable, keep
+    the listing: the unreadable alternative might be an accepted location.
+    """
+    values = _WORK_LOCATION.findall((description or "").replace("\r\n", "\n"))
+    if not values or any(
+        not _SINGLE_LOCATION.fullmatch(value) or re.search(r"\b(?:or|and)\b|[&/]", value, re.I)
+        for value in values
+    ):
+        return []
+    return [value.strip() for value in values]
 
 
 @dataclass(frozen=True)
@@ -168,15 +185,21 @@ def location_incompatible(listing: Listing, profile: Profile) -> Verdict:
             return PASSED
         return _cut("location", "is remote; the profile does not accept remote work")
 
+    locations = [listing.location] if listing.location else []
     city = normalize_location(listing.location)
-    if not city or _PLACEHOLDER_LOCATION.match(city):
+    from_body = not city or bool(_PLACEHOLDER_LOCATION.match(city))
+    if from_body:
+        locations = _body_locations(listing.description)
+    if not locations:
         return PASSED
     wanted = {normalize_location(place) for place in profile.locations}
     wanted.discard("")
-    if not wanted or city in wanted:
+    if not wanted or any(normalize_location(place) in wanted for place in locations):
         return PASSED
+    source = " (description's Work Location)" if from_body else ""
     return _cut(
-        "location", f"is in {listing.location}; the profile wants {', '.join(sorted(wanted))}"
+        "location",
+        f"is in {'; '.join(locations)}{source}; the profile wants {', '.join(sorted(wanted))}",
     )
 
 
