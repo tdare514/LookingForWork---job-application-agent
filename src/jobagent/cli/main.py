@@ -216,6 +216,74 @@ def draft(
     )
 
 
+@app.command("export")
+def export_cmd(
+    destination: Path = typer.Argument(..., help="Directory to write the archive into."),
+) -> None:
+    """Archive the whole data directory to one portable file."""
+    from jobagent.core.lifecycle import export as run_export
+
+    archive = run_export(destination)
+    console.print(f"[green]Exported[/green] {archive}")
+    console.print(
+        "[yellow]This archive is the most sensitive file this tool produces.[/yellow] "
+        "It contains your full application history."
+    )
+
+
+@app.command("purge")
+def purge_cmd(
+    yes: bool = typer.Option(False, "--yes", help="Required. Purge never runs unattended."),
+) -> None:
+    """Delete the dossier, then verify nothing recoverable remains."""
+    from jobagent.core.lifecycle import purge as run_purge
+
+    data_dir = default_data_dir()
+    if not yes:
+        console.print(f"This deletes everything under [bold]{data_dir}[/bold]:")
+        console.print("  profile, resume, jobs, application history, documents, audit log.")
+        console.print("Re-run with [bold]--yes[/bold] if that is what you want.")
+        raise typer.Exit(code=1)
+
+    report = run_purge()
+    console.print(
+        f"[green]Removed[/green] {report.removed_files} file(s), "
+        f"{report.removed_bytes / 1024:.0f} KB."
+    )
+    if report.clean:
+        console.print("[green]Verified: nothing recoverable remains.[/green]")
+    else:
+        console.print(f"[red]Survived purge:[/red] {report.remaining}")
+        raise typer.Exit(code=1)
+
+
+@app.command()
+def followups() -> None:
+    """What wants a follow-up today, most overdue first."""
+    from jobagent.tracking.followups import due
+
+    with Storage() as store:
+        items = due(BoardRepo(store).all())
+    if not items:
+        console.print("[green]Nothing overdue.[/green]")
+        return
+    table = Table(title="Follow-ups due")
+    table.add_column("Company")
+    table.add_column("Role")
+    table.add_column("Days")
+    table.add_column("What to do")
+    for item in items:
+        colour = "red" if item.stale else "yellow"
+        table.add_row(
+            item.job.company,
+            item.job.title,
+            f"[{colour}]{item.days_in_state}[/]",
+            item.reason,
+        )
+    console.print(table)
+    console.print("[dim]The agent drafts and reminds. Sending is yours.[/dim]")
+
+
 @app.command()
 def board() -> None:
     """Open the command board."""
