@@ -1,0 +1,197 @@
+# Resume source of truth -- EXAMPLE.
+#
+# Contact details here are placeholders on purpose: this repository is public.
+# The real resume lives in the data directory, which is outside the working
+# tree and never tracked:
+#
+#   cp resume.example.yaml ~/.local/share/jobagent/resume.yaml
+#   jobagent resume validate
+#
+# Structure matters more than prose. Every tailored bullet must cite an
+# accomplishment `id` from this file, and may not claim more scope, more
+# breadth, or different numbers than the accomplishment records.
+
+contact:
+  name: Your Name
+  email: you@example.com
+  phone: 000-000-0000
+  location: City, ON
+  linkedin: linkedin.com/in/your-handle
+  github: github.com/your-handle
+
+summary: >-
+  Computer Science student moving into business analysis and project delivery,
+  with three work terms covering requirements documentation, Agile delivery and
+  stakeholder communication.
+
+education:
+  - school: University of Guelph
+    credential: Bachelor of Computing (Honours), Computer Science
+    location: Guelph, ON
+    graduation: Expected 2026
+    honours: Honours
+    coursework:
+      - Systems Analysis & Design
+      - Software Engineering
+      - Software Reliability & Testing
+      - Data Structures & Algorithms
+      - Object-Oriented Programming
+
+roles:
+  - title: Project Manager
+    organization: ProjectGenova
+    location: Hybrid, ON
+    start: June 2026
+    end: null            # null means current
+    accomplishments:
+      - id: genova-status
+        text: >-
+          Monitored task progress across departments, following up with team
+          members to identify blockers and communicating status to maintain
+          alignment on deliverables
+        skills: [stakeholder communication, project coordination]
+        scope: contributed
+      - id: genova-validation
+        text: >-
+          Conducted data validation and quality checks using Excel formulas and
+          conditional formatting across tracked work items
+        metric: 100+ tracked work items
+        skills: [Excel, data validation, quality assurance]
+        scope: contributed
+      - id: genova-docs
+        text: >-
+          Documented and distributed meeting outcomes weekly, maintaining an
+          accessible knowledge base of decisions and action items
+        skills: [documentation, knowledge management]
+        scope: owned
+      - id: genova-event
+        text: Coordinated logistics and stakeholder outreach for an event
+        metric: 100 attendees, $7K budget, 5 AI-integrated solutions
+        skills: [stakeholder communication, event coordination, budgeting]
+        scope: owned
+
+  - title: Business Analyst
+    organization: Launch Path
+    location: Remote, ON
+    start: June 2025
+    end: September 2025
+    accomplishments:
+      - id: launchpath-requirements
+        text: >-
+          Translated business concepts into structured product requirements,
+          technical documentation and development plans
+        metric: 3 AI-focused MVP initiatives
+        skills: [requirements gathering, technical writing]
+        scope: owned
+      - id: launchpath-stories
+        text: >-
+          Created and organized user stories covering AI, data processing,
+          backend/database integration and reporting requirements
+        metric: 13+ user stories
+        skills: [user stories, requirements analysis]
+        scope: owned
+      - id: launchpath-jira
+        text: >-
+          Built Jira boards and task breakdowns for frontend, backend and
+          database work, improving visibility into scope and priorities
+        skills: [Jira, Agile, sprint planning]
+        scope: owned
+      - id: launchpath-collab
+        text: >-
+          Collaborated weekly with stakeholders and developers, translating
+          meeting discussions into actionable follow-up tasks
+        skills: [stakeholder communication, cross-functional collaboration]
+        scope: contributed
+
+  - title: Software Engineer
+    organization: Metrohousing
+    location: Guelph, ON
+    start: January 2025
+    end: April 2025
+    accomplishments:
+      - id: metro-ingestion
+        text: >-
+          Collaborated with a software development team to build a Python data
+          ingestion system using REST APIs to collect labour-market data for
+          real-estate visualizations
+        metric: 6-member team
+        skills: [Python, REST APIs, data ingestion]
+        scope: contributed
+      - id: metro-stories
+        text: >-
+          Organized and documented user stories across epics in a structured
+          knowledge base (GitHub wiki)
+        metric: 85+ user stories across 3 epics
+        skills: [documentation, requirements analysis]
+        scope: owned
+      - id: metro-qa
+        text: >-
+          Performed quality checks and validation on API responses, identifying
+          discrepancies and confirming outputs met documented requirements
+        skills: [quality assurance, API testing]
+        scope: contributed
+
+projects:
+  - name: AI Job Application Agent
+    tech: [Python, SQLite, GitHub]
+    date: "2026"
+    accomplishments:
+      - id: jobagent-roadmap
+        text: >-
+          Scoped a tool that sources, scores and tracks job applications,
+          defining a phased delivery roadmap with exit criteria and decomposing
+          it into tracked issues with acceptance criteria and dependencies
+        metric: 33 tracked issues
+        skills: [requirements analysis, delivery planning, Agile]
+        scope: owned
+      - id: jobagent-architecture
+        text: >-
+          Authored architecture and requirements documentation covering
+          component boundaries, data flow and a canonical data schema, plus
+          decision records capturing trade-offs
+        skills: [technical writing, systems design, documentation]
+        scope: owned
+      - id: jobagent-privacy
+        text: >-
+          Specified the privacy model -- a data inventory with retention rules
+          and a required human approval step before any application is sent
+        skills: [threat modelling, data governance]
+        scope: owned
+
+  - name: Gryphon Housing
+    tech: [Figma, UI/UX Research]
+    accomplishments:
+      - id: gryphon-research
+        text: >-
+          Researched methods to streamline landlord-student communication,
+          reducing average response time
+        metric: estimated 40% reduction
+        skills: [user research, UI/UX]
+        scope: contributed
+      - id: gryphon-wireframes
+        text: Created high-fidelity wireframes and user flows in Figma
+        skills: [Figma, wireframing]
+        scope: owned
+
+leadership:
+  - id: bbc-instructor
+    text: >-
+      Taught Python and mathematics to youth as an instructor, simplifying
+      technical concepts for beginners
+    skills: [teaching, communication]
+    scope: owned
+  - id: youth-design
+    text: >-
+      Produced social media and design assets (Canva) on structured timelines
+      with a remote creative team
+    skills: [design, remote collaboration]
+    scope: contributed
+
+skills:
+  Languages: [Python, Java, C, JavaScript, Node.js, SQL, HTML, CSS]
+  Tools:
+    [Jira, Git, GitHub, Figma, Lucidchart, draw.io, SharePoint,
+     Microsoft Teams, Microsoft Office, Google Workspace, VS Code]
+  Methods:
+    [Agile, Scrum, requirements gathering, user stories,
+     technical documentation, stakeholder communication, data validation]

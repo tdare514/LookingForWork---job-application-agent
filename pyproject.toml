@@ -32,6 +32,12 @@ src = ["src", "tests"]
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B", "SIM"]
 
+[tool.ruff.lint.flake8-bugbear]
+# Typer declares CLI metadata through call expressions in argument defaults.
+# That is the framework's documented idiom, not the mutable-default bug B008
+# exists to catch.
+extend-immutable-calls = ["typer.Argument", "typer.Option"]
+
 [tool.mypy]
 python_version = "3.11"
 strict = true

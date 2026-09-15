@@ -6,10 +6,13 @@ foundation works: initialise the data directory, show status, read the audit log
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import typer
 from rich.console import Console
 from rich.table import Table
 
+from jobagent.application.resume import load as load_resume
 from jobagent.core.paths import default_data_dir, ensure_data_dir
 from jobagent.core.pii import REGISTRY
 from jobagent.core.storage import Storage
@@ -110,6 +113,43 @@ def add(
     lamp = light_for(job.state)
     verb = "Added" if created else "Already tracked"
     console.print(f"[{lamp.colour}]{lamp.dot}[/] {verb}: [bold]{job.company}[/] — {job.title}")
+
+
+resume_app = typer.Typer(help="The resume source of truth.", no_args_is_help=True)
+app.add_typer(resume_app, name="resume")
+
+
+@resume_app.command("validate")
+def resume_validate(
+    path: Path = typer.Argument(None, help="Defaults to <data dir>/resume.yaml."),
+) -> None:
+    """Validate the resume source of truth. A bad resume fails loudly."""
+    target = path or (default_data_dir() / "resume.yaml")
+    try:
+        resume = load_resume(target)
+    except FileNotFoundError:
+        console.print(f"[red]No resume at[/red] {target}")
+        console.print("Start from the example: [bold]cp resume.example.yaml[/bold] " + str(target))
+        raise typer.Exit(code=1) from None
+    except Exception as exc:  # pydantic/yaml errors carry the field name
+        console.print(f"[red]Invalid resume[/red] at {target}:\n{exc}")
+        raise typer.Exit(code=1) from None
+
+    accomplishments = resume.all_accomplishments()
+    unmeasured = [a.id for a in accomplishments if a.metric is None]
+    table = Table(title=f"Resume valid — {resume.contact.name}")
+    table.add_column("Item")
+    table.add_column("Value")
+    table.add_row("Roles", str(len(resume.roles)))
+    table.add_row("Projects", str(len(resume.projects)))
+    table.add_row("Accomplishments", str(len(accomplishments)))
+    table.add_row("With a measurement", str(len(accomplishments) - len(unmeasured)))
+    console.print(table)
+    if unmeasured:
+        console.print(
+            f"[yellow]{len(unmeasured)} accomplishment(s) carry no metric.[/yellow] "
+            "That is allowed — tailoring will not invent one."
+        )
 
 
 @app.command()
