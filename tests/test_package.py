@@ -33,7 +33,7 @@ def _library() -> object:
         term_lengths="4, 8 or 12 months.",
         notice="None.",
         compensation="Open to the posted range.",
-        relocation="Mississauga, ON; able to commute to Toronto.",
+        relocation="Able to commute to the office.",
     )
 
 
@@ -48,7 +48,7 @@ def test_a_rephrased_question_finds_its_stored_answer() -> None:
         term_lengths="4, 8 or 12 months.",
         notice="None.",
         compensation="Open to the posted range.",
-        relocation="Mississauga, ON.",
+        relocation="Able to commute.",
     )
     found = library.find("Do you require sponsorship for employment in Canada?")
     assert found is not None

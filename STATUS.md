@@ -13,8 +13,9 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - Claude in Chrome handoff (`c` on the board): opens the posting and copies a prompt that carries my standing answers and forbids both submitting and inventing.
 - Resume source of truth (`resume.example.yaml`, `jobagent resume validate`): every claim the agent may make, each accomplishment carrying its metric and the scope actually held.
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
+- The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 63 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 67 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
 
 ## In progress

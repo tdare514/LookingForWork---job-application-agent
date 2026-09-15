@@ -186,12 +186,12 @@ def draft(
         description=description.read_text() if description else "",
     )
     library = standing_answers(
-        authorization="Authorized to work in Canada; no sponsorship required.",
-        availability="Available from January 2027 for the Winter 2027 term.",
-        term_lengths="4, 8 or 12 months.",
-        notice="None - available at the start of the term.",
-        compensation="Open to the posted range for this role.",
-        relocation="Based in Mississauga, ON; able to commute to Toronto offices.",
+        authorization=resume.standing.authorization,
+        availability=resume.standing.availability,
+        term_lengths=resume.standing.term_lengths,
+        notice=resume.standing.notice,
+        compensation=resume.standing.compensation,
+        relocation=resume.standing.relocation,
     )
 
     out_dir = data_dir / "packages" / f"{job.id}-{job.company.lower().replace(' ', '-')}"

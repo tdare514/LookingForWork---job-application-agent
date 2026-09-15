@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import re
+from pathlib import Path
+
 import pytest
 
 from jobagent.application.resume import (
@@ -22,10 +25,10 @@ from jobagent.application.truthfulness import (
 def _resume() -> Resume:
     return Resume(
         contact=Contact(
-            name="Oluwatoby Dare",
-            email="dareoluwatoby@gmail.com",
-            phone="226-337-5946",
-            location="Mississauga, ON",
+            name="Test Applicant",
+            email="test@example.com",
+            phone="000-000-0000",
+            location="City, ON",
         ),
         summary="Computer Science student moving into business analysis.",
         education=[
@@ -229,10 +232,49 @@ def test_the_committed_example_resume_stays_valid() -> None:
     assert all(a.id for a in resume.all_accomplishments())
 
 
-def test_the_example_resume_carries_no_real_contact_details() -> None:
-    """This repository is public. Real PII lives in the untracked data dir."""
-    from pathlib import Path
+def test_no_real_contact_details_anywhere_in_the_tracked_source() -> None:
+    """This repository is public. Real PII belongs only in the untracked data dir.
 
-    text = (Path(__file__).resolve().parents[1] / "resume.example.yaml").read_text()
-    for leak in ("dareoluwatoby@", "226-337-5946", "Mississauga"):
-        assert leak not in text, f"{leak!r} must not be committed to a public repo"
+    Scoped to the whole source tree, not just the example resume: the leak this
+    caught first was hardcoded contact details in application/handoff.py.
+    """
+    import subprocess
+
+    root = Path(__file__).resolve().parents[1]
+    tracked = subprocess.run(
+        ["git", "ls-files"], cwd=root, capture_output=True, text=True, check=True
+    ).stdout.split()
+
+    # Shapes, not values: a literal would itself be the leak.
+    patterns = (
+        re.compile(r"[a-z]{4,}@(gmail|outlook|yahoo|hotmail)\.com", re.I),
+        re.compile(r"\b\d{3}-\d{3}-\d{4}\b"),
+    )
+
+    def is_placeholder(match: str) -> bool:
+        digits = [c for c in match if c.isdigit()]
+        # 000-000-0000 and friends, plus the 555 fictional range.
+        return (digits and len(set(digits)) == 1) or match.startswith("555-")
+
+    offenders: list[str] = []
+    for rel in tracked:
+        path = root / rel
+        if not path.is_file() or path.suffix in {".pdf", ".docx", ".png"}:
+            continue
+        try:
+            text = path.read_text()
+        except (UnicodeDecodeError, OSError):
+            continue
+        if rel == "tests/test_truthfulness.py":
+            continue  # the patterns live here
+        for pattern in patterns:
+            for found in pattern.findall(text):
+                raw = found if isinstance(found, str) else found[0]
+                hit = pattern.search(text)
+                value = hit.group(0) if hit else raw
+                if is_placeholder(value):
+                    continue
+                offenders.append(f"{rel}: {pattern.pattern}")
+                break
+
+    assert not offenders, "real contact details in a public repo: " + "; ".join(offenders)
