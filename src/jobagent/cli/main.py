@@ -258,6 +258,66 @@ def purge_cmd(
 
 
 @app.command()
+def fetch(
+    source: str = typer.Argument(
+        ..., help="Adapter name, e.g. workday:rbc, or 'all' for every Workday tenant."
+    ),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max postings to pull."),
+    match: str = typer.Option(None, "--match", "-m", help="Only keep titles containing this text."),
+) -> None:
+    """Pull postings from a source onto the board.
+
+    Nothing is applied to; rows land as `new` for you to triage.
+    """
+    from jobagent.discovery.http import HostNotAllowed, PoliteClient, SourceDeclined
+    from jobagent.discovery.workday import ALL as WORKDAY_ALL
+
+    adapters = (
+        list(WORKDAY_ALL) if source == "all" else [a for a in WORKDAY_ALL if a.name == source]
+    )
+    if not adapters:
+        console.print(f"[red]Unknown source[/red] {source!r}.")
+        console.print("Known: " + ", ".join(a.name for a in WORKDAY_ALL) + ", or 'all'.")
+        raise typer.Exit(code=1)
+
+    hosts = {h for a in adapters for h in a.hosts}
+    added = skipped = 0
+    with Storage() as store, PoliteClient(hosts, min_interval_seconds=2.0) as client:
+        repo = BoardRepo(store)
+        for adapter in adapters:
+            try:
+                postings = list(adapter.fetch(client, limit=limit))
+            except SourceDeclined as exc:
+                # One tenant refusing says nothing about the others, so keep going.
+                console.print(f"[yellow]{adapter.name} declined:[/yellow] {exc}")
+                console.print("[dim]Use the board's `c` handoff for this one instead.[/dim]")
+                continue
+            except HostNotAllowed as exc:
+                console.print(f"[red]{adapter.name}:[/red] {exc}")
+                continue
+            except Exception as exc:  # schema drift -- loud, not silent
+                console.print(f"[red]{adapter.name} returned an unexpected shape:[/red] {exc}")
+                continue
+
+            for posting in postings:
+                if match and match.lower() not in posting.title.lower():
+                    continue
+                _job, created = repo.add(
+                    company=posting.company,
+                    title=posting.title,
+                    url=posting.url,
+                    location=posting.location,
+                )
+                added += created
+                skipped += not created
+            store.append_audit("fetch", {"source": adapter.name, "returned": len(postings)})
+
+    console.print(f"[green]{added} new[/green], {skipped} already tracked.")
+    if added:
+        console.print("Run [bold]jobagent board[/bold] to triage them.")
+
+
+@app.command()
 def report() -> None:
     """Funnel: what is converting, and what is not."""
     from jobagent.tracking.funnel import SMALL_SAMPLE
