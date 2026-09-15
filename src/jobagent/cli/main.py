@@ -258,6 +258,67 @@ def purge_cmd(
 
 
 @app.command()
+def report() -> None:
+    """Funnel: what is converting, and what is not."""
+    from jobagent.tracking.funnel import SMALL_SAMPLE
+    from jobagent.tracking.funnel import build as build_report
+
+    with Storage() as store:
+        data = build_report(BoardRepo(store).all())
+
+    if data.total == 0:
+        console.print("[yellow]Nothing tracked yet.[/yellow] Add a role with `jobagent add`.")
+        return
+
+    funnel = Table(title="Funnel")
+    funnel.add_column("Stage")
+    funnel.add_column("Reached", justify="right")
+    funnel.add_column("From previous", justify="right")
+    for stage in data.stages:
+        if stage.conversion is None:
+            rate = "—"
+        else:
+            # The denominator is part of the number. A bare percentage off four
+            # rows reads like evidence when it is not.
+            note = " [dim](thin)[/]" if stage.thin else ""
+            rate = f"{stage.conversion:.0%} of {stage.previous_total}{note}"
+        funnel.add_row(stage.state.value.title(), str(stage.reached), rate)
+    console.print(funnel)
+
+    outcomes = Table(title="Outcomes")
+    outcomes.add_column("Item")
+    outcomes.add_column("Count", justify="right")
+    outcomes.add_row("Tracked", str(data.total))
+    outcomes.add_row("Not yet triaged", str(data.untriaged))
+    outcomes.add_row("[red]Rejected[/]", str(data.rejected))
+    outcomes.add_row("Skipped", str(data.skipped))
+    outcomes.add_row("[yellow]Stale (30d+)[/]", str(data.stale))
+    if data.median_days_in_state is not None:
+        outcomes.add_row("Median days in state", str(data.median_days_in_state))
+    console.print(outcomes)
+
+    if data.by_company:
+        companies = Table(title="By company — ranked by applications, not rows")
+        companies.add_column("Company")
+        companies.add_column("Tracked", justify="right")
+        companies.add_column("Applied", justify="right")
+        for name, tracked, applied in data.by_company[:10]:
+            companies.add_row(name, str(tracked), str(applied))
+        console.print(companies)
+
+    if not data.has_outcomes:
+        console.print(
+            "\n[yellow]Nothing submitted yet[/yellow] — the rates above are "
+            "structure, not signal. Come back once applications are out."
+        )
+    elif data.thin_overall:
+        console.print(
+            f"\n[yellow]Fewer than {SMALL_SAMPLE} tracked roles.[/yellow] Treat every "
+            "percentage here as a hint, not a finding."
+        )
+
+
+@app.command()
 def followups() -> None:
     """What wants a follow-up today, most overdue first."""
     from jobagent.tracking.followups import due
