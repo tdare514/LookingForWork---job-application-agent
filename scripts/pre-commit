@@ -1,0 +1,31 @@
+#!/usr/bin/env bash
+# Install with: make hooks
+#
+# The realistic leak for this repo is not an attacker -- it is a key pasted into
+# a config file, or the data directory ending up staged. Both are cheap to catch
+# here, which is why minimal CI (#7) is enough for a solo build.
+set -euo pipefail
+
+staged=$(git diff --cached --name-only --diff-filter=ACM)
+[ -z "$staged" ] && exit 0
+
+# 1. Nothing from the data directory or a rendered document may be committed.
+if echo "$staged" | grep -qE '(^|/)(data/|.*\.(db|sqlite3?|pdf|docx)$)'; then
+  echo "pre-commit: refusing to commit data or generated documents:" >&2
+  echo "$staged" | grep -E '(^|/)(data/|.*\.(db|sqlite3?|pdf|docx)$)' >&2
+  exit 1
+fi
+
+# 2. Obvious credential shapes.
+patterns='(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}|-----BEGIN [A-Z ]*PRIVATE KEY-----|(api[_-]?key|secret|password|access[_-]?token)[[:space:]]*[:=][[:space:]]*["'"'"'][^"'"'"']{8,})'
+if git diff --cached -U0 | grep -nEi "$patterns" >&2; then
+  echo "pre-commit: possible credential in staged changes (see above)." >&2
+  echo "Credentials belong in the keychain or environment -- never in a file." >&2
+  exit 1
+fi
+
+# 3. Fast checks.
+if command -v ruff >/dev/null 2>&1; then
+  ruff check src tests
+  ruff format --check src tests
+fi
