@@ -2,12 +2,12 @@
 # belong to a different Python and will disagree with CI.
 PY ?= python3
 
-.PHONY: check lint format typecheck test install hooks
+.PHONY: check lint format typecheck test context install hooks
 
 install:
 	$(PY) -m pip install -e ".[dev]"
 
-check: lint typecheck test
+check: lint typecheck test context
 
 lint:
 	$(PY) -m ruff check src tests
@@ -22,6 +22,9 @@ typecheck:
 
 test:
 	$(PY) -m pytest -q
+
+context:
+	$(PY) scripts/check_context.py
 
 hooks:
 	cp scripts/pre-commit .git/hooks/pre-commit && chmod +x .git/hooks/pre-commit

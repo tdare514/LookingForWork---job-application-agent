@@ -1,49 +1,81 @@
-# Contributing
+# Working on this repo
 
-Single contributor, two-week build. This file exists so a fresh machine gets
-running in under a minute.
+One contributor. These rules exist to protect me from myself six weeks from now, not to coordinate a team.
 
 ## Setup
 
 ```bash
 python3 -m venv .venv && source .venv/bin/activate
 make install     # pip install -e ".[dev]"
-make hooks       # install the pre-commit hook
+make hooks       # install the pre-commit hook -- do this once per clone
 ```
 
-## Daily loop
+## The loop
 
 ```bash
-make check       # ruff + mypy (strict) + pytest -- run before every push
-make format      # apply ruff formatting and safe fixes
+git switch -c feat/short-description    # never work on main
+# ... change things ...
+make check                              # ruff + strict mypy + pytest
+python3 scripts/check_context.py        # docs and code still agree
+git push -u origin feat/short-description
 ```
 
-## First run
+Then open a PR. Squash merge. Delete the branch.
+
+## Why a PR at all, working alone
+
+Three reasons that survive having no reviewer:
+
+1. **The diff gets read once, deliberately.** Self-review is the only review here. Reading your own diff in the PR view catches scope creep and leftover debug output that `git diff` in a terminal does not.
+2. **CI runs before it reaches `main`.** A red `main` on a solo repo is discovered weeks later.
+3. **It is the record.** There is no changelog. The PR description is where "what I skipped and why" lives, and it is what a future session reads instead of this chat.
+
+A PR does not need to wait for anyone. Open it, let CI go green, read the diff, merge.
+
+## Branches
+
+`type/short-description` — `feat/`, `fix/`, `docs/`, `chore/`, `refactor/`.
+
+Never commit to `main`. Never rewrite `main` history.
+
+## Commits
+
+Conventional Commits for the subject line, because the PR title becomes the squash commit:
+
+```
+feat(board): sort needs-action above everything else
+fix(storage): reject credential-shaped keys before write
+docs(adr): accept 0005, board-first with Claude in Chrome
+```
+
+Body: why, not what — the diff already says what. Note anything skipped or assumed.
+
+Every commit must be authored as `tdare514 <143902012+tdare514@users.noreply.github.com>`. Any other author and it does not count as a contribution on the profile graph. Check with:
 
 ```bash
-jobagent init    # create the data directory and apply migrations
-jobagent status  # where data lives and what is in it
-jobagent pii     # what is stored, why, and for how long
-jobagent audit   # the append-only trail of what the agent did
+git log --format='%an <%ae>' -5
 ```
 
-## Where data lives
+## Before pushing
 
-**Not in this repository.** `~/.local/share/jobagent` by default, mode `0o700`,
-overridable with `JOBAGENT_DATA_DIR`. See
-[`docs/adr/0003-local-first-storage.md`](docs/adr/0003-local-first-storage.md).
+- [ ] `make check` green
+- [ ] `python3 scripts/check_context.py` green
+- [ ] Final diff read — scope, secrets, leftovers
+- [ ] `STATUS.md` matches reality if the change moved it
+- [ ] An ADR exists if a decision was made or reversed
 
-The pre-commit hook refuses any commit containing a database, a rendered PDF or
-DOCX, anything under `data/`, or a credential-shaped string. If it fires, it is
-right — move the value to the environment or the keychain.
+## What never goes in a commit
 
-## Rules that are not style preferences
+The pre-commit hook enforces the first two; the rest is judgement.
 
-1. **Secrets never touch the database.** `Storage` rejects credential-shaped
-   keys, and a test asserts it.
-2. **A new PII column must be registered** in `jobagent.core.pii`. A test fails
-   otherwise, because `purge` walks that registry.
-3. **The audit log is append-only.** There is no delete path, and a test asserts
-   no such method exists.
-4. **Nothing is sent without a recorded approval** (#24). The gate is
-   structural, not a setting.
+- Anything under the data directory, any `*.db`, any rendered `*.pdf` or `*.docx`
+- Anything credential-shaped — API keys, tokens, private keys, a real `.env`
+- A weakened test guarding the three rules in `AGENTS.md`. Change one deliberately, in its own commit, and say why.
+
+The repository is public. Assume everything committed is permanent.
+
+## Decisions
+
+A choice that is expensive to reverse gets an ADR in `docs/adr/`: context, options, decision, consequences. Numbered, immutable once accepted, superseded rather than edited.
+
+A file naming convention is not an architecture decision. Storage engine, data location, whether the agent may submit an application — those are.

@@ -30,6 +30,9 @@ day-by-day schedule and what was cut to fit the window.
 
 ## Documentation
 
+- [`AGENTS.md`](AGENTS.md) — working rules, commands, definition of done (start here)
+- [`STATUS.md`](STATUS.md) — what works right now
+- [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup and the git workflow
 - [`ROADMAP.md`](ROADMAP.md) — phased plan, dates, exit criteria
 - [`docs/architecture.md`](docs/architecture.md) — components, data flow, storage
 - [`docs/security-privacy.md`](docs/security-privacy.md) — threat model, PII handling, guardrails
