@@ -32,6 +32,7 @@ day-by-day schedule and what was cut to fit the window.
 
 - [`AGENTS.md`](AGENTS.md) — working rules, commands, definition of done (start here)
 - [`STATUS.md`](STATUS.md) — what works right now
+- [`docs/runbook.md`](docs/runbook.md) — how to run it and send an application
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — setup and the git workflow
 - [`ROADMAP.md`](ROADMAP.md) — phased plan, dates, exit criteria
 - [`docs/architecture.md`](docs/architecture.md) — components, data flow, storage

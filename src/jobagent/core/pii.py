@@ -73,6 +73,23 @@ REGISTRY: tuple[PIIField, ...] = (
         RETENTION_UNTIL_DELETED,
     ),
     PIIField(
+        "jobs",
+        "state",
+        "Where an application stands. With the company name this is the record "
+        "of approaching employers while employed elsewhere.",
+        Sensitivity.CRITICAL,
+        (Destination.NOWHERE,),
+        RETENTION_UNTIL_DELETED,
+    ),
+    PIIField(
+        "jobs",
+        "notes",
+        "Free-text notes on an opportunity, which routinely name recruiters and internal contacts.",
+        Sensitivity.CRITICAL,
+        (Destination.NOWHERE,),
+        RETENTION_UNTIL_DELETED,
+    ),
+    PIIField(
         "applications",
         "job_id",
         "Which company was applied to. Combined with timestamps this is the "

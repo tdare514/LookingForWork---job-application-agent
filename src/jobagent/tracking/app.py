@@ -29,6 +29,7 @@ from jobagent.application.truthfulness import TruthfulnessError
 from jobagent.core.paths import default_data_dir
 from jobagent.core.storage import Storage
 from jobagent.tracking.board import LIGHTS, State, light_for
+from jobagent.tracking.followups import due as due_followups
 from jobagent.tracking.repo import BoardRepo
 
 
@@ -115,7 +116,9 @@ class Board(App[None]):
                 parts.append(f"[{lamp.colour}]{lamp.dot} {n} {lamp.label.lower()}[/]")
         total = sum(counts.values())
         summary = "   ".join(parts) if parts else "no opportunities yet"
-        self.query_one("#summary", Static).update(f"{total} tracked    {summary}")
+        overdue = len(due_followups(jobs))
+        nudge = f"    [yellow]{overdue} need a follow-up[/]" if overdue else ""
+        self.query_one("#summary", Static).update(f"{total} tracked    {summary}{nudge}")
 
         if keep_job_id is not None and keep_job_id in self._row_ids:
             table.move_cursor(row=self._row_ids.index(keep_job_id))

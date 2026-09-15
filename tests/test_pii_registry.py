@@ -49,3 +49,31 @@ def test_nothing_critical_is_sent_to_a_third_party() -> None:
             assert field.destinations == (pii.Destination.NOWHERE,), (
                 f"{field.table}.{field.column} is critical but may leave the machine"
             )
+
+
+def test_every_pii_shaped_column_in_the_schema_is_registered(store: Storage) -> None:
+    """The direction that was missing, and that let a real bug through.
+
+    The registry-to-schema check above proves nothing about a column that exists
+    but was never registered. `jobs.notes` (recruiter names) and `jobs.state`
+    (the application history) sat unregistered for two commits because only one
+    direction was enforced. Purge walks this registry, so an unregistered column
+    is a column purge does not know to check.
+    """
+    # Columns that hold personal data or reveal the application history.
+    must_be_registered = {
+        ("jobs", "state"),
+        ("jobs", "notes"),
+        ("applications", "notes"),
+        ("application_transitions", "occurred_at"),
+        ("documents", "path"),
+        ("audit_log", "detail"),
+        ("profile", "payload"),
+        ("resume", "payload"),
+    }
+    missing = must_be_registered - pii.registered_columns()
+    assert not missing, f"PII columns missing from the registry: {sorted(missing)}"
+
+    # And every registered table must really exist, or purge walks a ghost.
+    for table in {t for t, _ in must_be_registered}:
+        assert table in store.tables()
