@@ -204,6 +204,46 @@ class Requirements:
             "ruleset_version": self.ruleset_version,
         }
 
+    @classmethod
+    def from_dict(cls, payload: dict[str, object]) -> Requirements:
+        """Rebuild from what `as_dict` stored, tolerating an older shape.
+
+        Unknown keys are dropped and missing ones keep their defaults, so an
+        extraction written by an earlier ruleset still loads rather than
+        crashing the scorer. The alternative -- refusing to read it -- would
+        make every rule change a migration.
+        """
+
+        def strings(key: str) -> tuple[str, ...]:
+            value = payload.get(key) or ()
+            if isinstance(value, (list, tuple)):
+                return tuple(str(item) for item in value)
+            return ()
+
+        def number(key: str) -> int | None:
+            value = payload.get(key)
+            return int(value) if isinstance(value, (int, float)) else None
+
+        def text(key: str) -> str | None:
+            value = payload.get(key)
+            return str(value) if isinstance(value, str) and value else None
+
+        return cls(
+            required_skills=strings("required_skills"),
+            preferred_skills=strings("preferred_skills"),
+            required_bullets=strings("required_bullets"),
+            preferred_bullets=strings("preferred_bullets"),
+            min_years=number("min_years"),
+            max_years=number("max_years"),
+            compensation_min=number("compensation_min"),
+            compensation_max=number("compensation_max"),
+            currency=text("currency"),
+            work_arrangement=text("work_arrangement"),
+            sponsorship=text("sponsorship"),
+            application_deadline=text("application_deadline"),
+            ruleset_version=text("ruleset_version") or RULESET_VERSION,
+        )
+
 
 @dataclass
 class _Block:

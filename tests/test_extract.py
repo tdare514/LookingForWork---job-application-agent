@@ -271,3 +271,46 @@ def test_the_corpus_is_real_and_every_posting_is_labelled() -> None:
     assert len(LABELS) >= 12
     for posting in POSTINGS:
         assert posting["description"], f"{posting['source_id']} has no description"
+
+
+# -- the storage round trip -----------------------------------------------
+
+
+def test_requirements_survive_a_round_trip_through_storage() -> None:
+    """`from_dict` is on the read path the scorer depends on.
+
+    If it silently returned empty tuples, every stored posting would look as
+    though it asked for no skills, `skill_overlap` would go unavailable across
+    the whole board, and every score would shift -- with nothing failing.
+    """
+    original = extract(
+        "Requirements\n"
+        "- 2+ years of Python and SQL\n"
+        "Nice to have\n"
+        "- Tableau\n"
+        "Salary: $70,000 - $90,000 CAD\n"
+        "This is a hybrid role.\n"
+    )
+    restored = Requirements.from_dict(json.loads(json.dumps(original.as_dict())))
+    assert restored == original
+
+
+def test_from_dict_tolerates_an_older_stored_shape() -> None:
+    """A payload from an earlier ruleset loads rather than crashing the scorer.
+
+    Refusing it would make every rule change a migration, and the fields that
+    are missing have defaults that mean exactly the right thing: "the posting
+    did not say".
+    """
+    restored = Requirements.from_dict(
+        {"required_skills": ["python"], "a_field_that_no_longer_exists": 7}
+    )
+    assert restored.required_skills == ("python",)
+    assert restored.preferred_skills == ()
+    assert restored.compensation_min is None
+    assert restored.sponsorship is None
+
+
+def test_from_dict_reads_an_empty_payload_as_a_posting_that_said_nothing() -> None:
+    restored = Requirements.from_dict({})
+    assert restored == Requirements()

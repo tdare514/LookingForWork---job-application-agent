@@ -78,22 +78,77 @@ Boolean, cheap, run first:
 - Seniority more than one rung outside the target.
 
 Filtered jobs are stored with the reason, not discarded. A filter that is
-cutting too aggressively should be discoverable.
+cutting too aggressively should be discoverable — `jobagent score --filtered`
+is the query.
+
+**Absence is never a refusal.** A posting that does not state compensation has
+not offered a low one; one silent on sponsorship has not declined to sponsor; a
+title with no level marker is not a senior role. Every rule passes on missing
+data, because a filter that cuts too much produces an empty board, and an empty
+board is indistinguishable from a quiet week.
+
+Two consequences worth stating, both learned from real postings:
+
+- The seniority rule cuts only on a level the posting actually stated. Roughly
+  half of bank postings carry no level marker, and the ladder's `mid` fallback is
+  an assumption this tool made, not something an employer wrote. Unmarked
+  postings pass the filter and take a middling seniority score instead.
+- A compensation band in a different currency is not compared numerically. No
+  conversion rate belongs in an offline tool, so the filter declines to judge
+  rather than judging wrongly.
 
 ### 6. Score
 
-Decomposed, weighted, and stored component by component:
+Decomposed, weighted, and stored component by component. These are the shipped
+defaults in `jobagent.core.profile.Weights`:
 
 | Component | Weight | Basis |
 | --- | --- | --- |
-| Skill overlap | 0.30 | Required and preferred skills against profile skills, required weighted higher |
-| Seniority fit | 0.15 | Distance on the normalized ladder |
-| Domain relevance | 0.20 | Industry and problem-domain overlap with history |
-| Semantic fit | 0.25 | Embedding similarity, description against profile narrative |
-| Freshness | 0.10 | Decay from `posted_at`; week-old postings are already crowded |
+| Skill overlap | 0.40 | Posting skills against profile skills, required weighted three times preferred |
+| Seniority fit | 0.20 | Distance on the normalized ladder |
+| Domain relevance | 0.27 | Title vocabulary against the profile's target titles |
+| Freshness | 0.13 | Decay from `posted_at`, 14-day half-life |
+| Semantic fit | 0.00 | **No backend.** See below |
 
 Weights are profile configuration, not constants. Someone changing domains wants
-domain relevance near zero, and the system should not fight that.
+domain relevance near zero, and the system should not fight that. They are
+relative importance rather than fractions: the profile's numbers are normalized
+on read, so they need not sum to one.
+
+**Semantic fit does not ship.** It needs an embedding model. A metered
+embeddings API is out of scope under the budget constraint in `AGENTS.md`, and
+no local backend has been chosen. The component stays in the schema and in every
+stored decomposition, recorded as explicitly unavailable — but the profile
+*refuses* a non-zero weight for it rather than accepting one and quietly
+ignoring it. A weight that does nothing is worse than one that is absent,
+because the score it produces looks complete.
+
+Two components are narrower than this section originally claimed, and the stored
+`basis` string for each says so rather than letting the name imply more. Domain
+relevance compares title vocabulary, not industry history — there is no industry
+field on the profile to read. Skill overlap is measured as the share of what the
+*posting* asks for that the profile covers, so a long profile is not punished for
+listing skills a given posting does not want.
+
+### A component with no basis is dropped, not zeroed
+
+Most rows carry no description until `fetch --details` has run, and Workday's
+list endpoint publishes no `posted_at` at all. Scoring those absences as zero
+would rank a posting last for a fetch that has not happened yet, and running the
+fetch later would reshuffle the board for reasons that have nothing to do with
+the jobs. So an unmeasurable component is dropped and the remaining weights
+rescale over what was actually measured.
+
+The distinction that has to be kept sharp is between *nothing to read* and *read
+it, found nothing*. A posting with no stored description genuinely cannot be
+judged on skills. A 12,000-character description naming none of the profile's
+skills has been judged, and its score is zero. Conflating the two was a real bug:
+it let a contact centre posting outrank a risk internship by virtue of the
+extractor finding nothing in it. Knowing less about a job must never flatter it.
+
+The cost is that totals are strictly comparable only between postings scored on
+the same components, so every stored score records which ones those were and
+`jobagent score` prints the count.
 
 The stored decomposition is what makes a score arguable. "Ranked 7th because
 skill overlap is 0.9 but domain relevance is 0.2" is actionable; a bare 0.63 is
@@ -111,7 +166,17 @@ The digest is a reading queue. Selecting from it is the handoff into Phase 3.
 
 Scoring is regression-tested against a fixture set of labeled postings — roles
 the user would clearly pursue, clearly skip, and genuinely find borderline. A
-scoring change that flips a clear case fails CI.
+scoring change that flips a clear case fails CI. The corpus is twelve real RBC,
+BMO and TD postings in `tests/fixtures/`, labelled by hand in
+`ranking_labels.json` and exercised by `tests/test_ranking.py`.
+
+No absolute score is asserted. Pinning "the credit risk intern scores 0.53"
+would fail on every honest change to the weights and teach whoever is on call to
+update the number rather than read it. What is pinned is the relationships:
+every clear pursue outranks every clear skip, each expected cut names the rule
+that made it, and a borderline row beats the clear skips without being pinned
+against the pursues — which side of a borderline case a change lands on is the
+thing that is genuinely uncertain.
 
 Feedback from outcomes closes the loop: applications that reached a screen
 versus those that went nowhere are the real label set. By Phase 4 the funnel
