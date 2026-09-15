@@ -23,3 +23,4 @@
 - [ ] ADR added or updated if a decision was made or reversed
 - [ ] No test guarding the three rules in `AGENTS.md` was weakened
 - [ ] Commits authored as `tdare514`, not as Claude
+- [ ] This PR covers **one** issue (or is an explicit link in a stack)
