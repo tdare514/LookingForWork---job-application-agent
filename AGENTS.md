@@ -26,11 +26,11 @@ Where judgement is needed: rule-based first, then Claude Code (already paid for)
 
 | Path | Purpose |
 |---|---|
-| `src/jobagent/core/` | `paths` (data dir resolution), `storage` (SQLite + repository layer), `migrations` (forward-only), `pii` (the PII registry) |
+| `src/jobagent/core/` | `paths` (data dir resolution), `storage` (SQLite + repository layer), `migrations` (forward-only), `pii` (the PII registry), `profile` (declared intent, validated on load), `vocabulary` (terms more than one package shares). Depends on nothing above it. |
 | `src/jobagent/tracking/` | `board` (states and traffic lights), `repo` (board repository), `app` (the Textual TUI) |
 | `src/jobagent/application/` | `handoff` (Claude in Chrome prompt, clipboard, browser) |
 | `src/jobagent/discovery/` | `adapter` (the source contract and registry), `http` (rate-limited client, host allowlist), `workday`, `greenhouse` |
-| `src/jobagent/matching/` | `normalize` (company, title, location and seniority canonicalization, and the de-duplication key). Pure functions, no I/O. |
+| `src/jobagent/matching/` | `normalize` (company, title, location and seniority canonicalization, and the de-duplication key), `extract` (rule-based requirements from posting text). Pure functions, no I/O. |
 | `src/jobagent/cli/` | Typer entry point. Every command lives here. |
 | `tests/` | Mirrors `src/`. `conftest.py` isolates the data directory per test. |
 | `docs/adr/` | Decision records. Numbered, immutable once accepted, superseded rather than edited. |

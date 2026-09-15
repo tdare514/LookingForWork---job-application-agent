@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from jobagent.core.storage import Storage, utcnow
+from jobagent.matching.extract import Requirements
 from jobagent.matching.normalize import (
     dedupe_key,
     normalize_company,
@@ -256,6 +257,73 @@ class BoardRepo:
                 " VALUES (?, ?, ?, ?)",
                 (source, source_id, json.dumps(body, default=str), utcnow()),
             )
+
+    # -- extracted requirements -------------------------------------------
+
+    def save_requirements(self, job_id: int, requirements: Requirements) -> None:
+        """Store one extraction, stamped with the ruleset that produced it.
+
+        `prompt_version` in M0001 assumed an LLM. It holds a ruleset version
+        instead (ADR 0008), which is the same idea doing the same job: a quality
+        change has to be traceable to a rule change, or the evaluation harness
+        cannot tell improvement from drift.
+        """
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT INTO job_requirements (job_id, payload, prompt_version, extracted_at)"
+                " VALUES (?, ?, ?, ?)",
+                (
+                    job_id,
+                    json.dumps(requirements.as_dict()),
+                    requirements.ruleset_version,
+                    utcnow(),
+                ),
+            )
+        # Fields the canonical job row owns, filled only where it is silent.
+        with self.store.transaction() as conn:
+            if requirements.compensation_min is not None:
+                conn.execute(
+                    "UPDATE jobs SET compensation_min = ?, compensation_max = ?, currency = ?"
+                    " WHERE id = ? AND compensation_min IS NULL",
+                    (
+                        requirements.compensation_min,
+                        requirements.compensation_max,
+                        requirements.currency,
+                        job_id,
+                    ),
+                )
+            if requirements.work_arrangement:
+                conn.execute(
+                    "UPDATE jobs SET work_arrangement = ? WHERE id = ?"
+                    " AND (work_arrangement IS NULL OR work_arrangement = '')",
+                    (requirements.work_arrangement, job_id),
+                )
+            if requirements.application_deadline:
+                conn.execute(
+                    "UPDATE jobs SET deadline = ? WHERE id = ?"
+                    " AND (deadline IS NULL OR deadline = '')",
+                    (requirements.application_deadline, job_id),
+                )
+
+    def latest_requirements(self, job_id: int) -> dict[str, Any] | None:
+        row = (
+            self.store.connect()
+            .execute(
+                "SELECT payload FROM job_requirements WHERE job_id = ? ORDER BY id DESC LIMIT 1",
+                (job_id,),
+            )
+            .fetchone()
+        )
+        if row is None:
+            return None
+        loaded: dict[str, Any] = json.loads(row["payload"])
+        return loaded
+
+    def jobs_with_descriptions(self) -> list[tuple[int, str]]:
+        rows = self.store.connect().execute(
+            "SELECT id, description FROM jobs WHERE description IS NOT NULL AND description != ''"
+        )
+        return [(int(r["id"]), str(r["description"])) for r in rows]
 
     def backfill_normalized(self) -> int:
         """Populate the normalized columns for rows that predate M0003.
