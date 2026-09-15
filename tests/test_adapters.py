@@ -1,9 +1,14 @@
 """Workday and Greenhouse adapters.
 
-The Workday mapping is written against the documented CXS shape but was never
-verified against a live tenant -- outbound network is blocked in the build
-environment. So the tests concentrate on the thing that protects us from that:
-a wrong assumption must FAIL LOUDLY, never produce half-mapped rows.
+The Workday fixtures below are real responses captured from live RBC, BMO and
+TD tenants on 2026-09-15 (#57), trimmed to a few rows and otherwise unedited.
+That matters: the two id defects these tests now pin were invisible against the
+hand-written fixtures this file used to carry, because those fixtures were
+written from the same wrong assumption as the code.
+
+The loud-failure tests stay. The shape is verified as of one date, not
+guaranteed for the next, so a wrong assumption must still fail rather than
+produce half-mapped rows.
 """
 
 from __future__ import annotations
@@ -14,23 +19,68 @@ import pytest
 from jobagent.discovery.greenhouse import GreenhouseAdapter
 from jobagent.discovery.greenhouse import UnexpectedSchema as GreenhouseSchema
 from jobagent.discovery.http import PoliteClient, SourceDeclined
-from jobagent.discovery.workday import ALL, RBC, UnexpectedSchema, WorkdayAdapter
+from jobagent.discovery.workday import ALL, BMO, RBC, TD, UnexpectedSchema, WorkdayAdapter
 
-WORKDAY_PAGE = {
-    "total": 2,
+# Captured from https://rbc.wd3.myworkdayjobs.com/wday/cxs/rbc/rbcearlytalent1/jobs
+# on 2026-09-15. The first row is a reposted requisition -- note the "-1" its
+# path carries and its bulletFields does not.
+RBC_LIVE_PAGE = {
+    "total": 156,
+    "userAuthenticated": False,
+    "facets": [],
     "jobPostings": [
         {
-            "title": "Business Analyst, Winter 2027",
-            "externalPath": "/job/Toronto-Ontario-Canada/Business-Analyst_R-0000123",
-            "locationsText": "Toronto, Ontario, Canada",
-            "postedOn": "Posted 5 Days Ago",
-            "bulletFields": ["R-0000123"],
+            "title": "2027 Winter - GRM, Counterparty Credit Risk Intern (4 Months)",
+            "externalPath": (
+                "/job/TORONTO-Ontario-Canada/XMLNAME-2027-Winter---GRM--Counterparty-"
+                "Credit-Risk-Intern--4-Months-_R-0000186717-1"
+            ),
+            "locationsText": "TORONTO, Ontario, Canada",
+            "postedOn": "Posted Today",
+            "bulletFields": ["R-0000186717"],
         },
         {
-            "title": "Technical Systems Analyst",
-            "externalPath": "/job/Toronto/Tech-Systems-Analyst_R-0000456",
-            "locationsText": "Toronto, Ontario, Canada",
+            "title": "2027 Winter - Technology Analyst Intern (8 Months)",
+            "externalPath": (
+                "/job/TORONTO-Ontario-Canada/XMLNAME-2027-Winter---Technology-"
+                "Analyst-Intern--8-Months-_R-0000187520"
+            ),
+            "locationsText": "TORONTO, Ontario, Canada",
+            "postedOn": "Posted 5 Days Ago",
+            "bulletFields": ["R-0000187520"],
+        },
+    ],
+}
+
+# Captured from td.wd3. TD requisition ids contain an underscore, which is what
+# broke the old path-splitting derivation.
+TD_LIVE_PAGE = {
+    "total": 1756,
+    "jobPostings": [
+        {
+            "title": "Bilingual Contact Center Representative",
+            "externalPath": (
+                "/job/7250-Mile-End-Montreal-Quebec/Bilingual-Contact-Center-"
+                "Representative--Canadian-Banking--Easyline_R_1468577-1"
+            ),
+            "locationsText": "7250 Mile End, Montreal, Quebec",
+            "postedOn": "Posted Yesterday",
+            "remoteType": "Hybrid",
+            "bulletFields": ["R_1468577", "Contact Centre"],
+        },
+    ],
+}
+
+# Captured from bmo.wd3.
+BMO_LIVE_PAGE = {
+    "total": 1039,
+    "jobPostings": [
+        {
+            "title": "Client Service Associate",
+            "externalPath": "/job/Calgary-AB-CAN/Client-Service-Associate_R260026567",
+            "locationsText": "Calgary, AB, CAN",
             "postedOn": "Posted Today",
+            "bulletFields": ["R260026567"],
         },
     ],
 }
@@ -59,31 +109,76 @@ def _client(handler: object, hosts: set[str]) -> PoliteClient:
 # -- Workday: the happy path --------------------------------------------------
 
 
-def test_workday_maps_a_documented_page() -> None:
-    postings = RBC.parse_response(WORKDAY_PAGE)
+def test_workday_maps_a_live_rbc_page() -> None:
+    postings = RBC.parse_response(RBC_LIVE_PAGE)
     assert [p.title for p in postings] == [
-        "Business Analyst, Winter 2027",
-        "Technical Systems Analyst",
+        "2027 Winter - GRM, Counterparty Credit Risk Intern (4 Months)",
+        "2027 Winter - Technology Analyst Intern (8 Months)",
     ]
     first = postings[0]
     assert first.company == "RBC"
-    assert first.source_id == "R-0000123"
-    assert first.location == "Toronto, Ontario, Canada"
-    assert first.url == (
-        "https://rbc.wd3.myworkdayjobs.com/en-US/rbcearlytalent1"
-        "/job/Toronto-Ontario-Canada/Business-Analyst_R-0000123"
+    assert first.location == "TORONTO, Ontario, Canada"
+    assert first.posted_text == "Posted Today"
+    assert first.url is not None
+    assert first.url.startswith(
+        "https://rbc.wd3.myworkdayjobs.com/en-US/rbcearlytalent1/job/TORONTO-Ontario-Canada/"
     )
-    assert first.raw["bulletFields"] == ["R-0000123"]
+    assert first.raw["bulletFields"] == ["R-0000186717"]
 
 
 def test_workday_fetches_through_the_polite_client() -> None:
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.method == "POST"
         assert "/wday/cxs/rbc/rbcearlytalent1/jobs" in str(request.url)
-        return httpx.Response(200, json=WORKDAY_PAGE)
+        return httpx.Response(200, json=RBC_LIVE_PAGE)
 
     postings = list(RBC.fetch(_client(handler, RBC.hosts), limit=2))
     assert len(postings) == 2
+
+
+# -- Workday: the id has to survive reposts and underscores -------------------
+#
+# Both of these came back wrong against live data and neither was caught by the
+# hand-written fixtures this file used to carry.
+
+
+def test_a_repost_keeps_the_original_requisition_id() -> None:
+    """Workday appends "-1" to a reposted path; the requisition is unchanged.
+
+    #28 has to collapse a repost into one job with two sightings. It cannot do
+    that if the id moves every time the posting is refreshed.
+    """
+    reposted, fresh = RBC.parse_response(RBC_LIVE_PAGE)
+    assert str(reposted.raw["externalPath"]).endswith("-1")
+    assert reposted.source_id == "R-0000186717"
+    assert fresh.source_id == "R-0000187520"
+
+
+def test_an_id_containing_an_underscore_is_not_truncated() -> None:
+    """TD ids look like `R_1468577`. Splitting the path on "_" loses the prefix."""
+    posting = TD.parse_response(TD_LIVE_PAGE)[0]
+    assert posting.source_id == "R_1468577"
+
+
+def test_bmo_ids_map_straight_through() -> None:
+    posting = BMO.parse_response(BMO_LIVE_PAGE)[0]
+    assert posting.source_id == "R260026567"
+    assert posting.company == "BMO"
+
+
+def test_a_tenant_without_bulletfields_falls_back_to_the_path() -> None:
+    """Not every tenant populates bulletFields, so the path is still a fallback."""
+    postings = RBC.parse_response(
+        {"jobPostings": [{"title": "Analyst", "externalPath": "/job/Toronto/Analyst_R-0000999"}]}
+    )
+    assert postings[0].source_id == "R-0000999"
+
+
+def test_the_path_fallback_also_strips_the_repost_suffix() -> None:
+    postings = RBC.parse_response(
+        {"jobPostings": [{"title": "Analyst", "externalPath": "/job/Toronto/Analyst_R-0000999-2"}]}
+    )
+    assert postings[0].source_id == "R-0000999"
 
 
 # -- Workday: a wrong assumption must fail loudly -----------------------------
@@ -119,13 +214,27 @@ def test_a_tenant_that_declines_stops_the_adapter(caplog: object) -> None:
 # -- Workday: the tenants -----------------------------------------------------
 
 
-def test_the_four_banks_are_configured_and_distinct() -> None:
-    assert {a.company for a in ALL} == {"RBC", "BMO", "Scotiabank", "TD"}
-    assert len({a.host for a in ALL}) == 4
-    assert len({a.name for a in ALL}) == 4
+def test_only_banks_that_actually_run_workday_are_registered() -> None:
+    """Scotiabank is not one of them.
+
+    jobs.scotiabank.com runs SAP SuccessFactors; the `scotiabank.wd3` tenant
+    does not exist, and every candidate site slug returns an identical
+    empty-message 422. An adapter that can only ever fail is worse than no
+    adapter, because it reads as coverage.
+    """
+    assert {a.company for a in ALL} == {"RBC", "BMO", "TD"}
+    assert "Scotiabank" not in {a.company for a in ALL}
+    assert len({a.host for a in ALL}) == len(ALL)
+    assert len({a.name for a in ALL}) == len(ALL)
 
 
 def test_every_adapter_declares_a_rate_limit_and_terms() -> None:
+    """The endpoints answered 200 in September. That is reachability, not consent.
+
+    Nothing about a live 200 tells us the terms permit automated access, so this
+    stays `unverified` until someone reads them. Loosening it because the fetch
+    works would be the wrong lesson to draw from #57.
+    """
     for adapter in ALL:
         assert adapter.min_interval_seconds >= 1.0
         assert adapter.terms.checked_on
