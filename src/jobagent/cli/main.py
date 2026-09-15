@@ -7,6 +7,7 @@ foundation works: initialise the data directory, show status, read the audit log
 from __future__ import annotations
 
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 import typer
 from rich.console import Console
@@ -21,6 +22,11 @@ from jobagent.core.pii import REGISTRY
 from jobagent.core.storage import Storage
 from jobagent.tracking.board import State, light_for
 from jobagent.tracking.repo import BoardRepo
+
+if TYPE_CHECKING:  # Imported lazily at runtime; the CLI keeps its startup cheap.
+    from jobagent.discovery.adapter import RawPosting
+    from jobagent.discovery.http import PoliteClient
+    from jobagent.discovery.workday import WorkdayAdapter
 
 app = typer.Typer(help="Personal, human-in-the-loop job application agent.", no_args_is_help=True)
 console = Console()
@@ -269,6 +275,12 @@ def fetch(
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Max postings to pull."),
     match: str = typer.Option(None, "--match", "-m", help="Only keep titles containing this text."),
+    details: bool = typer.Option(
+        False,
+        "--details",
+        help="Also fetch each posting's description and closing date. One extra "
+        "request per posting, so it is slower.",
+    ),
 ) -> None:
     """Pull postings from a source onto the board.
 
@@ -286,7 +298,7 @@ def fetch(
         raise typer.Exit(code=1)
 
     hosts = {h for a in adapters for h in a.hosts}
-    added = skipped = 0
+    added = skipped = deadlines_found = detail_failures = 0
     with Storage() as store, PoliteClient(hosts, min_interval_seconds=2.0) as client:
         repo = BoardRepo(store)
         # Rows added before M0003 have no dedupe key, so they would look new
@@ -307,9 +319,16 @@ def fetch(
                 console.print(f"[red]{adapter.name} returned an unexpected shape:[/red] {exc}")
                 continue
 
-            for posting in postings:
-                if match and match.lower() not in posting.title.lower():
-                    continue
+            kept = [p for p in postings if not match or match.lower() in p.title.lower()]
+            if details and kept:
+                console.print(
+                    f"[dim]Fetching {len(kept)} description(s) from {adapter.name}...[/dim]"
+                )
+
+            for posting in kept:
+                if details:
+                    posting, failed = _with_detail(adapter, client, posting)
+                    detail_failures += failed
                 repo.store_raw(posting.source, posting.source_id, posting.raw)
                 _job, created = repo.add(
                     company=posting.company,
@@ -318,14 +337,45 @@ def fetch(
                     location=posting.location,
                     source=posting.source,
                     source_id=posting.source_id,
+                    description=posting.description,
+                    deadline=posting.deadline,
                 )
                 added += created
                 skipped += not created
+                deadlines_found += bool(posting.deadline)
             store.append_audit("fetch", {"source": adapter.name, "returned": len(postings)})
 
     console.print(f"[green]{added} new[/green], {skipped} already tracked (sighting recorded).")
+    if deadlines_found:
+        console.print(f"{deadlines_found} posting(s) carried a closing date.")
+    if detail_failures:
+        console.print(
+            f"[yellow]{detail_failures} description(s) could not be fetched.[/yellow] "
+            "The rows are on the board without them."
+        )
     if added:
         console.print("Run [bold]jobagent board[/bold] to triage them.")
+
+
+def _with_detail(
+    adapter: WorkdayAdapter, client: PoliteClient, posting: RawPosting
+) -> tuple[RawPosting, int]:
+    """Fetch one posting's detail, tolerating failure.
+
+    A tenant refusing the detail endpoint is a stop signal for the whole adapter
+    and is re-raised. Anything else -- a shape we did not expect, one posting
+    withdrawn between the list call and this one -- costs that description and
+    nothing more. Losing the run over one bad posting would be worse than losing
+    the field.
+    """
+    from jobagent.discovery.http import SourceDeclined
+
+    try:
+        return adapter.fetch_detail(client, posting), 0
+    except SourceDeclined:
+        raise
+    except Exception:
+        return posting, 1
 
 
 @app.command()
