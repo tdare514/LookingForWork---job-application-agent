@@ -249,3 +249,56 @@ def test_a_posting_that_says_nothing_is_never_cut(requirements: Requirements) ->
         work_authorization=WorkAuthorization(authorized_in=["IN"], needs_sponsorship=True),
     )
     assert apply_filters(bare, requirements, profile).passed
+
+
+@pytest.mark.parametrize("location", [None, "2 Locations", "Multiple Locations"])
+@pytest.mark.parametrize("separator", [" ", "\n", "\r\n"])
+def test_explicit_body_location_resolves_unknown_location(
+    location: str | None, separator: str
+) -> None:
+    row = listing(
+        location=location,
+        description=f"Work Location:{separator}Wilmington, Delaware, United States of America\n"
+        "Hours:\n40",
+    )
+    verdict = apply_filters(row, EMPTY, make_profile())
+    assert verdict.rule == "location"
+    assert "Wilmington" in (verdict.reason or "")
+    assert "description" in (verdict.reason or "")
+
+
+@pytest.mark.parametrize(
+    "description",
+    [
+        "Our headquarters are in Wilmington, Delaware, United States of America",
+        "Work Location:\nHours:\n40",
+        "Work Location: Multiple Locations",
+        "Work Location: Toronto or Wilmington, Delaware, United States of America",
+        "Work Location: Wilmington, Delaware, United States of America\nWork Location: TBD",
+    ],
+)
+def test_ambiguous_body_location_remains_unknown(description: str) -> None:
+    assert apply_filters(
+        listing(location="2 Locations", description=description), EMPTY, make_profile()
+    ).passed
+
+
+def test_body_location_accepts_any_explicit_alternative() -> None:
+    row = listing(
+        location="2 Locations",
+        description=(
+            "Work Location: Wilmington, Delaware, United States of America\n"
+            "Work Location:\nToronto, Ontario, Canada\nHours:\n40"
+        ),
+    )
+    assert apply_filters(row, EMPTY, make_profile()).passed
+
+
+def test_body_location_does_not_override_a_real_location_or_remote_arrangement() -> None:
+    description = "Work Location:\nWilmington, Delaware, United States of America"
+    assert apply_filters(listing(description=description), EMPTY, make_profile()).passed
+    assert apply_filters(
+        listing(location="2 Locations", description=description, work_arrangement="remote"),
+        EMPTY,
+        make_profile(work_arrangements=["remote"]),
+    ).passed
