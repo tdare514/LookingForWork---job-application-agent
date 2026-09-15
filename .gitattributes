@@ -1,0 +1,11 @@
+* text=auto eol=lf
+
+*.png binary
+*.jpg binary
+*.pdf binary
+*.docx binary
+*.db binary
+*.sqlite3 binary
+
+# Generated; keep out of diffs and language stats.
+docs/** linguist-documentation
