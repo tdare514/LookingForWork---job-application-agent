@@ -4,7 +4,7 @@ Snapshot of **now**, not a changelog. Update it in the same commit as the change
 
 Last updated: 2026-09-15
 
-Current focus: the resume source of truth and its truthfulness check are in. Next is rendering a tailored variant to PDF/DOCX (#36).
+Current focus: the matching pipeline is closed — fetch, extract, filter, score. Next is the daily shortlist and digest (#32), then sending the RBC and BMO applications before they close on the 20th.
 
 ## What works
 
@@ -16,7 +16,7 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 226 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 298 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
@@ -29,7 +29,7 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 
 ## In progress
 
-Nothing in flight.
+- **ADR 0008 is `Proposed` and waiting on me.** It supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy. The decision in 0005 stands; only its reasoning changes. Accept or reject it; nothing else is in flight.
 
 ## Next
 
@@ -44,7 +44,7 @@ Nothing in flight.
 - A 401/403 from a tenant is treated as a refusal and stops that adapter, with the Claude in Chrome handoff as the fallback. No circumvention.
 - **Semantic fit does not ship and the profile refuses a non-zero weight for it.** It needs an embedding model; a metered embeddings API is out of scope and no local backend has been chosen. It is recorded in every decomposition as explicitly unavailable rather than silently ignored.
 - Scoring totals are strictly comparable only between postings measured on the same components. Every score records which ones those were, and `jobagent score` prints the count per row — a row scored on 2 of 5 is a thinner judgement than one scored on 4.
-- Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read. The 0.25 "semantic fit" weight in `docs/job-matching.md` needs an embedding model and cannot ship as specified — #31 will need a re-weighting decision.
+- Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.
