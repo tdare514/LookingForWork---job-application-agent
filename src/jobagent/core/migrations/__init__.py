@@ -143,4 +143,20 @@ M0001 = Migration(
 )
 
 
-MIGRATIONS: tuple[Migration, ...] = (M0001,)
+M0002 = Migration(
+    2,
+    "board_state",
+    """
+    -- The board is the product. One row per opportunity, carrying its own state,
+    -- so a personal tracker does not need a join to answer "where am I with BMO".
+    ALTER TABLE jobs ADD COLUMN url TEXT;
+    ALTER TABLE jobs ADD COLUMN state TEXT NOT NULL DEFAULT 'new';
+    ALTER TABLE jobs ADD COLUMN deadline TEXT;
+    ALTER TABLE jobs ADD COLUMN notes TEXT;
+    ALTER TABLE jobs ADD COLUMN state_changed_at TEXT;
+    CREATE INDEX idx_jobs_state ON jobs(state);
+    """,
+)
+
+
+MIGRATIONS: tuple[Migration, ...] = (M0001, M0002)
