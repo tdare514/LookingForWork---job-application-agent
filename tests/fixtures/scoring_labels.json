@@ -1,0 +1,102 @@
+{
+  "_README": [
+    "Hand-labelled verdicts for the ranking regression (#31), judged against",
+    "profile.example.yaml: Winter 2027 co-op, Toronto/Mississauga/Guelph,",
+    "hybrid or onsite, intern or junior, SQL/Python/Excel.",
+    "",
+    "Every verdict below was decided by reading the posting against that profile,",
+    "NOT by running the scorer and writing down what it said. A label derived from",
+    "the thing under test measures nothing. Where the scorer disagrees with a",
+    "'pursue' or a 'skip', the label is the judgement and the scorer is wrong.",
+    "",
+    "  pursue     \u2014 I would spend an evening on this application.",
+    "  skip       \u2014 I would not open it. Wrong country, wrong rung, or wrong job.",
+    "  borderline \u2014 genuinely arguable. No ordering is asserted for these; they",
+    "               are here so that a change which moves one is visible rather",
+    "               than silent.",
+    "",
+    "The test asserts only what the labels actually justify: no 'pursue' may be",
+    "cut by a hard filter, and no 'skip' may outrank a 'pursue'. It deliberately",
+    "does not assert exact scores -- pinning 0.62 would fail on every weight",
+    "change, including the improvements.",
+    "",
+    "INCOMPLETE in the same way the extraction labels are: 12 postings, which is",
+    "enough to catch a rule that inverts the ranking and not enough to calibrate",
+    "one. Real calibration is outcome data (#4), which does not exist until",
+    "applications are out."
+  ],
+  "labels": [
+    {
+      "source_id": "R-0000186717",
+      "title": "2027 Winter - GRM, Counterparty Credit Risk Intern (4 Months)",
+      "verdict": "pursue",
+      "why": "Winter 2027 intern, Toronto, risk analytics and reporting. This is the job the profile describes."
+    },
+    {
+      "source_id": "R-0000183468",
+      "title": "2027 Capital Markets, Global Markets Quantitative Trading Summer Analyst",
+      "verdict": "skip",
+      "why": "New York, and a summer term. The profile wants a Winter 2027 term in Toronto, Mississauga or Guelph, and does not list remote."
+    },
+    {
+      "source_id": "R-0000187520",
+      "title": "2027 Winter - GRM, Global Economic Sanctions Intern (4 Months)",
+      "verdict": "pursue",
+      "why": "Winter 2027 intern in Toronto, analytical review work in the same group as the credit risk role."
+    },
+    {
+      "source_id": "R-0000187859",
+      "title": "2027 Capital Markets, Quantitative Technology Services Summer Analyst",
+      "verdict": "skip",
+      "why": "Jersey City, and a summer term rather than the winter one the profile is looking for."
+    },
+    {
+      "source_id": "R260025276",
+      "title": "Senior Manager, Analytics and Insights",
+      "verdict": "skip",
+      "why": "Senior manager. Four rungs above a co-op student; the work is right and the level is not."
+    },
+    {
+      "source_id": "R260026107",
+      "title": "Manager, Customer Insights & Reporting",
+      "verdict": "skip",
+      "why": "Manager. Same reason: the analytics content does not make it applicable."
+    },
+    {
+      "source_id": "R260026756",
+      "title": "Bank Manager II",
+      "verdict": "skip",
+      "why": "Emeryville, California, and a management role in retail banking."
+    },
+    {
+      "source_id": "R260026119",
+      "title": "Director, Strategy & Business Management, Global Equities",
+      "verdict": "skip",
+      "why": "Director in New York. Nothing about it is in range."
+    },
+    {
+      "source_id": "R_1468577",
+      "title": "Bilingual Contact Center Representative",
+      "verdict": "skip",
+      "why": "Montreal, and a contact centre role rather than analysis."
+    },
+    {
+      "source_id": "R_1499215",
+      "title": "Senior Quantitative Analyst (Stress Testing Model Development) - SAS/Python",
+      "verdict": "skip",
+      "why": "Wilmington, Delaware, and senior. Interesting work, wrong country and wrong rung."
+    },
+    {
+      "source_id": "R_1499218",
+      "title": "Quantitative Analytics Specialist (Stress Testing Model Development) - SAS/Python",
+      "verdict": "skip",
+      "why": "Wilmington, Delaware. Same posting family as the one above, one level down, still US."
+    },
+    {
+      "source_id": "R_1508330",
+      "title": "Contact Centre Rep II - TD Auto Finance Customer Service (English & French)",
+      "verdict": "borderline",
+      "why": "Toronto and junior, which is in range, but customer service rather than analysis. A real person would decide by how the term is going, so nothing is asserted about where it ranks."
+    }
+  ]
+}

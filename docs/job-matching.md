@@ -84,16 +84,32 @@ cutting too aggressively should be discoverable.
 
 Decomposed, weighted, and stored component by component:
 
-| Component | Weight | Basis |
+| Component | Default weight | Basis |
 | --- | --- | --- |
-| Skill overlap | 0.30 | Required and preferred skills against profile skills, required weighted higher |
-| Seniority fit | 0.15 | Distance on the normalized ladder |
-| Domain relevance | 0.20 | Industry and problem-domain overlap with history |
-| Semantic fit | 0.25 | Embedding similarity, description against profile narrative |
-| Freshness | 0.10 | Decay from `posted_at`; week-old postings are already crowded |
+| Skill overlap | 0.40 | Required and preferred skills against profile skills, required counted double |
+| Seniority fit | 0.20 | Distance on the normalized ladder |
+| Domain relevance | 0.27 | Share of the profile's own vocabulary that appears in the posting |
+| Freshness | 0.13 | Decay from `posted_at`, halving every two weeks |
+| Semantic fit | 0.00 | **Not scored.** See below. |
 
 Weights are profile configuration, not constants. Someone changing domains wants
-domain relevance near zero, and the system should not fight that.
+domain relevance near zero, and the system should not fight that. They are
+relative rather than absolute: whatever the profile states is normalized on
+read, so doubling every number says the same thing.
+
+**Semantic fit does not ship, and the profile refuses to weight it.** It needs
+an embedding model; a metered embeddings API is out of scope under the budget
+constraint, and no local backend has been decided. Setting the weight above zero
+fails validation with that reason rather than storing a weight nothing computes
+— a score that silently drops a quarter of its definition looks complete and is
+not. The candidates if it is ever wanted: a local static-embedding model
+(~30 MB, offline, free, but a dependency of consequence and therefore an ADR),
+or stdlib TF-IDF, which is cheaper and catches vocabulary rather than meaning.
+
+Domain relevance is the component carrying that absence, and it is a proxy: it
+measures how much of the profile's narrative vocabulary turns up in the posting.
+It catches a credit-risk posting for someone who writes about risk. It misses a
+synonym, which is exactly what semantic fit was for.
 
 The stored decomposition is what makes a score arguable. "Ranked 7th because
 skill overlap is 0.9 but domain relevance is 0.2" is actionable; a bare 0.63 is

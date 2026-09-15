@@ -271,14 +271,25 @@ def _unique(bullets: Iterable[str]) -> tuple[str, ...]:
     return tuple(out)
 
 
-def _skills_in(texts: tuple[str, ...]) -> tuple[str, ...]:
-    haystack = "\n".join(texts).lower()
+def canonical_skills(text: str) -> tuple[str, ...]:
+    """Every skill in the shared vocabulary that this text mentions.
+
+    Public because the scorer has to put the *profile's* skills through the same
+    vocabulary it puts a posting's through. "Power BI" written by a person and
+    "powerbi" written by a job board are one skill, and comparing the raw
+    strings scores zero on exactly the matches that matter.
+    """
+    haystack = text.lower()
     found = [
         name
         for name, patterns in _COMPILED_SKILLS.items()
         if any(p.search(haystack) for p in patterns)
     ]
     return tuple(sorted(found))
+
+
+def _skills_in(texts: tuple[str, ...]) -> tuple[str, ...]:
+    return canonical_skills("\n".join(texts))
 
 
 def _years(texts: tuple[str, ...]) -> tuple[int | None, int | None]:

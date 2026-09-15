@@ -547,6 +547,131 @@ def extract(
 
 
 @app.command()
+def score() -> None:
+    """Filter and score the board against your profile.
+
+    Hard filters run first and their cuts are stored with the reason -- nothing
+    is deleted, so a filter that is cutting too hard is visible in
+    `jobagent shortlist --filtered`.
+    """
+    from jobagent.matching.filters import apply as apply_filters
+    from jobagent.matching.score import score as score_candidate
+
+    with Storage() as store:
+        profile = load_stored_profile(store)
+        if profile is None:
+            console.print(
+                "[yellow]No profile stored.[/yellow] Scoring has nothing to score against."
+            )
+            console.print("Set one with [bold]jobagent profile set <file>[/bold].")
+            raise typer.Exit(code=1)
+
+        repo = BoardRepo(store)
+        candidates = repo.candidates()
+        if not candidates:
+            console.print("[yellow]Nothing on the board yet.[/yellow] Try `jobagent fetch`.")
+            raise typer.Exit(code=1)
+
+        repo.clear_scores()
+        kept = cut = 0
+        for candidate in candidates:
+            verdict = apply_filters(candidate, profile)
+            if not verdict.passed:
+                repo.save_filtered(candidate.job_id, verdict)
+                cut += 1
+                continue
+            repo.save_score(score_candidate(candidate, profile))
+            kept += 1
+        store.append_audit("score", {"scored": kept, "filtered": cut})
+
+    console.print(f"[green]{kept} scored[/green], {cut} filtered out.")
+    if kept:
+        console.print("Run [bold]jobagent shortlist[/bold] to read them.")
+    if cut:
+        console.print("[dim]Run `jobagent shortlist --filtered` to see what was cut and why.[/dim]")
+
+
+def _component_share(components: dict[str, object], name: str) -> str:
+    """One component as a two-decimal string, or an em dash when absent.
+
+    Absent rather than zero: a score stored by an older run may not carry a
+    component this version knows about, and printing 0.00 for it would read as
+    a verdict rather than as a gap.
+    """
+    part = components.get(name)
+    if isinstance(part, dict) and "value" in part:
+        return f"{float(part['value']):.2f}"
+    return "—"
+
+
+@app.command()
+def shortlist(
+    limit: int = typer.Option(10, "--limit", "-n", help="How many rows."),
+    filtered: bool = typer.Option(False, "--filtered", help="Show what the hard filters cut."),
+) -> None:
+    """The ranked list, with the decomposition that produced each score."""
+    with Storage() as store:
+        repo = BoardRepo(store)
+        if filtered:
+            rows = repo.filtered_out(limit=limit)
+            if not rows:
+                console.print("[green]Nothing was filtered out.[/green]")
+                return
+            table = Table(title="Filtered out — stored, not discarded")
+            table.add_column("Company")
+            table.add_column("Role")
+            table.add_column("Why")
+            for job, reason in rows:
+                table.add_row(job.company, job.title, reason)
+            console.print(table)
+            return
+
+        ranked = repo.shortlist(limit=limit)
+
+    if not ranked:
+        console.print("[yellow]Nothing scored yet.[/yellow] Run [bold]jobagent score[/bold] first.")
+        return
+
+    table = Table(title="Shortlist")
+    table.add_column("#", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Company")
+    table.add_column("Role")
+    table.add_column("Skill", justify="right")
+    table.add_column("Level", justify="right")
+    table.add_column("Domain", justify="right")
+    table.add_column("Fresh", justify="right")
+    for rank, (job, total, components) in enumerate(ranked, start=1):
+        table.add_row(
+            str(rank),
+            f"{total:.2f}",
+            job.company,
+            job.title[:46],
+            _component_share(components, "skill_overlap"),
+            _component_share(components, "seniority_fit"),
+            _component_share(components, "domain_relevance"),
+            _component_share(components, "freshness"),
+        )
+    console.print(table)
+
+    # The decomposition is the feature, so at least the top row explains itself
+    # in words rather than leaving the user to interpret four decimals.
+    top_job, _total, top_components = ranked[0]
+    reasons = [
+        f"{name.replace('_', ' ')}: {part['reason']}"
+        for name, part in top_components.items()
+        if isinstance(part, dict) and part.get("reason")
+    ]
+    console.print(f"\n[bold]Why {top_job.company} — {top_job.title}[/bold] is first:")
+    for line in reasons:
+        console.print(f"  • {line}")
+    console.print(
+        "\n[dim]semantic fit is unscored: it needs a local embedding model, "
+        "which no ADR has decided on yet.[/dim]"
+    )
+
+
+@app.command()
 def report() -> None:
     """Funnel: what is converting, and what is not."""
     from jobagent.tracking.funnel import SMALL_SAMPLE

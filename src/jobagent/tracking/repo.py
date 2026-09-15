@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
+import dataclasses
 import hashlib
 import json
 from dataclasses import dataclass
 from typing import Any
 
 from jobagent.core.storage import Storage, utcnow
+from jobagent.matching.candidate import Candidate
 from jobagent.matching.extract import Requirements
+from jobagent.matching.filters import Verdict
 from jobagent.matching.normalize import (
     dedupe_key,
     normalize_company,
@@ -17,6 +20,7 @@ from jobagent.matching.normalize import (
     normalize_title,
     same_role,
 )
+from jobagent.matching.score import Score
 from jobagent.tracking.board import State, rank_for
 
 
@@ -319,6 +323,111 @@ class BoardRepo:
         loaded: dict[str, Any] = json.loads(row["payload"])
         return loaded
 
+    # -- candidates, filters and scores ------------------------------------
+
+    def candidates(self) -> list[Candidate]:
+        """Every tracked row in the shape the matching pipeline reads.
+
+        Rows the board has already closed are left out: re-ranking something
+        rejected two weeks ago spends the same effort to produce a row nobody
+        will read.
+        """
+        rows = self.store.connect().execute(
+            "SELECT id, company, title, location, description, work_arrangement,"
+            " compensation_min, compensation_max, currency, posted_at, first_seen_at, state"
+            " FROM jobs"
+        )
+        out: list[Candidate] = []
+        for row in rows:
+            if row["state"] in {State.REJECTED, State.SKIPPED}:
+                continue
+            payload = self.latest_requirements(int(row["id"]))
+            out.append(
+                Candidate(
+                    job_id=int(row["id"]),
+                    company=str(row["company"]),
+                    title=str(row["title"]),
+                    location=row["location"],
+                    description=row["description"],
+                    work_arrangement=row["work_arrangement"],
+                    compensation_min=row["compensation_min"],
+                    compensation_max=row["compensation_max"],
+                    currency=row["currency"],
+                    posted_at=row["posted_at"],
+                    first_seen_at=row["first_seen_at"],
+                    requirements=_requirements_from(payload),
+                )
+            )
+        return out
+
+    def save_score(self, score: Score) -> None:
+        """Store a score with its decomposition intact.
+
+        One row per scoring run rather than an update in place: "why is this
+        ranked seventh" is a question about a moment, and a weight change that
+        moves everything should be visible as a change rather than as a number
+        that was always that.
+        """
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT INTO scores (job_id, total, components, filtered, filter_reason, scored_at)"
+                " VALUES (?, ?, ?, 0, NULL, ?)",
+                (score.job_id, score.total, json.dumps(score.as_dict()), utcnow()),
+            )
+
+    def save_filtered(self, job_id: int, verdict: Verdict) -> None:
+        """Record a cut, with its reason. Filtered is not deleted.
+
+        A filter that is cutting too aggressively has to be discoverable, and
+        the only way that happens is if the rows it removed are still here to
+        be listed.
+        """
+        with self.store.transaction() as conn:
+            conn.execute(
+                "INSERT INTO scores (job_id, total, components, filtered, filter_reason, scored_at)"
+                " VALUES (?, 0.0, '{}', 1, ?, ?)",
+                (job_id, verdict.label, utcnow()),
+            )
+
+    def clear_scores(self) -> None:
+        """Drop previous runs before a fresh one.
+
+        Scores are derived data -- every row here can be recomputed from the
+        jobs, their requirements and the profile -- so this is not the audit
+        log and does not need the audit log's guarantees.
+        """
+        with self.store.transaction() as conn:
+            conn.execute("DELETE FROM scores")
+
+    def shortlist(self, limit: int = 20) -> list[tuple[Job, float, dict[str, Any]]]:
+        """Ranked survivors, each with the decomposition that produced it."""
+        rows = self.store.connect().execute(
+            "SELECT job_id, total, components FROM scores WHERE filtered = 0"
+            " ORDER BY total DESC, job_id ASC LIMIT ?",
+            (limit,),
+        )
+        out: list[tuple[Job, float, dict[str, Any]]] = []
+        for row in rows:
+            job = self.get(int(row["job_id"]))
+            if job is None:  # deleted between scoring and reading
+                continue
+            out.append((job, float(row["total"]), json.loads(row["components"])))
+        return out
+
+    def filtered_out(self, limit: int = 50) -> list[tuple[Job, str]]:
+        """What the hard filters cut, and why."""
+        rows = self.store.connect().execute(
+            "SELECT job_id, filter_reason FROM scores WHERE filtered = 1 ORDER BY id DESC LIMIT ?",
+            (limit,),
+        )
+        out: list[tuple[Job, str]] = []
+        for row in rows:
+            job = self.get(int(row["job_id"]))
+            if job is None:
+                continue
+            out.append((job, str(row["filter_reason"] or "")))
+        return out
+
     def jobs_with_descriptions(self) -> list[tuple[int, str]]:
         rows = self.store.connect().execute(
             "SELECT id, description FROM jobs WHERE description IS NOT NULL AND description != ''"
@@ -393,3 +502,20 @@ class BoardRepo:
 
     def as_dicts(self) -> list[dict[str, Any]]:
         return [j.__dict__ for j in self.all()]
+
+
+def _requirements_from(payload: dict[str, Any] | None) -> Requirements:
+    """Rebuild a Requirements from its stored payload.
+
+    Unknown keys are dropped rather than raising: a payload written by an older
+    ruleset must still load, or a rule change would strand every row extracted
+    before it.
+    """
+    if not payload:
+        return Requirements()
+    fields = {f.name for f in dataclasses.fields(Requirements)}
+    known = {k: v for k, v in payload.items() if k in fields}
+    for key in ("required_skills", "preferred_skills", "required_bullets", "preferred_bullets"):
+        if key in known and known[key] is not None:
+            known[key] = tuple(known[key])
+    return Requirements(**known)

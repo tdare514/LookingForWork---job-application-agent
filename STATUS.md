@@ -16,12 +16,13 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 226 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 258 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
 - `jobagent fetch <source> --details` — pulls each posting's description and **closing date** from the source's own posting page. Deadlines fill `jobs.deadline` only when empty, so a date typed in by hand always wins.
 - `jobagent extract` — rule-based requirements from posting text (#30): required vs preferred skills, years, compensation, work arrangement, and the closing date. Evaluated against 12 hand-labelled real postings with per-field precision and recall enforced in CI.
+- `jobagent score` / `shortlist` — hard filters then a decomposed score (#31). Filters cut on blocklist, deal-breakers, seniority distance, arrangement, city, a disclosed band entirely below the floor, and a stated refusal to sponsor; every cut is stored with its reason and readable with `shortlist --filtered`. The score keeps each component and the sentence that explains it, weighted by the profile.
 - `jobagent report` — funnel with denominators stated, small samples flagged, and a plain "nothing submitted yet" when that is the truth.
 - `jobagent export` / `purge` — one archive out, and a delete that verifies nothing recoverable remains.
 - Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
@@ -34,15 +35,17 @@ Nothing in flight.
 
 1. Send the RBC and BMO applications. Packages are built; the company paragraph and the "why this company" answer still need me.
 2. Rephrasing toward a posting's vocabulary, through the same truthfulness gate.
-3. Hard filters and scoring (#31), rule-based, reading the extracted requirements.
+3. The daily shortlist and digest (#32), reading the scores that #31 now produces.
 
 ## Known limitations
 
 - **Workday fetch is verified against live RBC, BMO and TD tenants** (2026-09-15, #57) — real rows, correct ids, resolving URLs. The 403 previously recorded here was the build container's proxy, not a tenant. A 200 is reachability, not permission: `terms.allows_automated_access` stays `unverified` until someone reads them.
 - **Scotiabank has no Workday adapter and cannot have one.** `jobs.scotiabank.com` runs SAP SuccessFactors; the `scotiabank.wd3` tenant does not exist. Scotiabank closes 2026-10-02 — use the Claude in Chrome handoff.
 - A 401/403 from a tenant is treated as a refusal and stops that adapter, with the Claude in Chrome handoff as the fallback. No circumvention.
-- Scoring is not built. When it is, it is rule-based: no metered API calls in the core loop. The 0.25 "semantic fit" weight in `docs/job-matching.md` needs an embedding model and cannot ship as specified — #31 will need a re-weighting decision.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
+- **Scoring is calibrated against 12 labelled postings, and only three survive the filters.** The ranking is proven to keep a labelled skip below both labelled pursues; it is not proven to order well. A borderline customer-service posting currently ranks second, above one of the two roles worth applying to — the domain-relevance proxy is keyword overlap, and that is what it costs. Real calibration is outcome data, which does not exist until applications are out.
+- Semantic fit is unscored. The profile refuses a non-zero weight for it: it needs a local embedding model, and choosing one is an ADR nobody has written.
+- A posting whose location field reads `2 Locations` (Workday does this) is treated as unknown and survives the location filter, even when the body names a US city. Extraction does not read a city out of posting text.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.
 
