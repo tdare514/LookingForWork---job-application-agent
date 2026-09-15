@@ -89,6 +89,7 @@ Load what the task needs, in this order. Do not read all of `docs/` by default.
 
 ## Working rules
 
+- **One issue, one branch, one PR.** Never batch several issues into one branch, even when they are sequential and the work is going well — a PR covering five issues cannot be reviewed, reverted, or pointed at from an issue. When later work depends on earlier work, stack the PRs (each based on the previous) rather than merging them into one.
 - One concern per branch. Small diffs.
 - Ruff and mypy are the authority on style. Do not argue formatting.
 - Strict typing everywhere, no per-file opt-outs, no `# type: ignore` without a reason on the same line.

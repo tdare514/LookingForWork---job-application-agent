@@ -36,6 +36,25 @@ A PR does not need to wait for anyone. Open it, let CI go green, read the diff, 
 
 `type/short-description` — `feat/`, `fix/`, `docs/`, `chore/`, `refactor/`.
 
+**One issue per branch, one PR per branch.** This is the rule that is easiest to
+break when the work is flowing and everything passes: you finish an issue, the
+next one is right there, and six issues later the branch holds a diff nobody can
+review. It already happened once here — PR #44 reached fifteen issues before it
+was split into a stack.
+
+The cost is not theoretical:
+
+- An issue cannot link to the PR that closed it, so the tracker stops meaning
+  anything.
+- Nothing can be reverted independently. One bad change means reverting five
+  good ones.
+- The diff view — the only review this repo gets — becomes useless past a few
+  hundred lines.
+
+When later work genuinely depends on earlier work, **stack** the PRs: each one's
+base is the previous branch, merged in order. That keeps each diff small without
+pretending the dependency does not exist.
+
 Never commit to `main`. Never rewrite `main` history.
 
 ## Commits
