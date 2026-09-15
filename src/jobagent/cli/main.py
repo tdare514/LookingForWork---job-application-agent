@@ -19,6 +19,10 @@ from jobagent.application.resume import load as load_resume
 from jobagent.application.tailor import Posting
 from jobagent.core.paths import default_data_dir, ensure_data_dir
 from jobagent.core.pii import REGISTRY
+from jobagent.core.profile import Profile
+from jobagent.core.profile import load as load_stored_profile
+from jobagent.core.profile import load_file as load_profile_file
+from jobagent.core.profile import store as store_profile
 from jobagent.core.storage import Storage
 from jobagent.tracking.board import State, light_for
 from jobagent.tracking.repo import BoardRepo
@@ -164,6 +168,100 @@ def resume_validate(
             f"[yellow]{len(unmeasured)} accomplishment(s) carry no metric.[/yellow] "
             "That is allowed — tailoring will not invent one."
         )
+
+
+profile_app = typer.Typer(help="What you are looking for.", no_args_is_help=True)
+app.add_typer(profile_app, name="profile")
+
+
+def _load_profile_or_exit(path: Path | None, *, about_to_store: bool) -> Profile:
+    """Load a profile file, or report why not and stop.
+
+    Shared by `validate` and `set` so the two cannot drift into describing the
+    same bad file differently -- which is the whole point of having a validate
+    command you trust before you store anything.
+    """
+    target = path or (default_data_dir() / "profile.yaml")
+    try:
+        return load_profile_file(target)
+    except FileNotFoundError:
+        console.print(f"[red]No profile at[/red] {target}")
+        console.print("Start from the example: [bold]cp profile.example.yaml[/bold] " + str(target))
+        raise typer.Exit(code=1) from None
+    except Exception as exc:  # pydantic and the secret guard both name the field
+        console.print(f"[red]Invalid profile[/red] at {target}:\n{exc}")
+        if about_to_store:
+            console.print("[dim]Nothing was stored.[/dim]")
+        raise typer.Exit(code=1) from None
+
+
+@profile_app.command("validate")
+def profile_validate(
+    path: Path = typer.Argument(None, help="Defaults to <data dir>/profile.yaml."),
+) -> None:
+    """Check a profile file without storing it."""
+    profile = _load_profile_or_exit(path, about_to_store=False)
+    console.print("[green]Profile valid[/green]")
+    _print_profile(profile, stored=False)
+
+
+@profile_app.command("set")
+def profile_set(
+    path: Path = typer.Argument(None, help="Defaults to <data dir>/profile.yaml."),
+) -> None:
+    """Validate a profile file and store it. This is what the agent then reads."""
+    profile = _load_profile_or_exit(path, about_to_store=True)
+    with Storage() as store:
+        store_profile(store, profile)
+    console.print(f"[green]Profile stored[/green] — schema v{profile.schema_version}")
+    _print_profile(profile, stored=True)
+
+
+@profile_app.command("show")
+def profile_show() -> None:
+    """What the agent is actually using, read back from the database."""
+    with Storage() as store:
+        profile = load_stored_profile(store)
+    if profile is None:
+        console.print("[yellow]No profile stored.[/yellow]")
+        console.print("Set one with [bold]jobagent profile set <file>[/bold].")
+        raise typer.Exit(code=1)
+    _print_profile(profile, stored=True)
+
+
+def _print_profile(profile: Profile, *, stored: bool) -> None:
+    """Summarise a profile. Compensation and work authorization are named, not
+    printed: they are the two highest-sensitivity fields in the dossier, and a
+    terminal is a place people screen-share."""
+    table = Table(title="Profile" + ("" if stored else " (not stored)"))
+    table.add_column("Field")
+    table.add_column("Value")
+    table.add_row("Titles", ", ".join(profile.target_titles))
+    table.add_row("Seniority", ", ".join(s.value for s in profile.target_seniority))
+    table.add_row("Locations", ", ".join(profile.locations))
+    table.add_row("Arrangements", ", ".join(profile.work_arrangements))
+    table.add_row("Must have", ", ".join(profile.must_have_skills))
+    table.add_row("Nice to have", ", ".join(profile.nice_to_have_skills) or "—")
+    table.add_row("Deal-breakers", ", ".join(profile.deal_breakers) or "—")
+    table.add_row("Blocked companies", str(len(profile.company_blocklist)))
+    table.add_row(
+        "Compensation floor",
+        "set" if profile.compensation.floor is not None else "none stated",
+    )
+    table.add_row(
+        "Sponsorship needed",
+        "yes" if profile.work_authorization.needs_sponsorship else "no",
+    )
+    console.print(table)
+
+    weights = Table(title="Scoring weights — normalized")
+    weights.add_column("Component")
+    weights.add_column("Share", justify="right")
+    for name, share in profile.weights.normalized().items():
+        label = name.replace("_", " ")
+        note = " [dim](no backend yet — #31)[/]" if name == "semantic_fit" else ""
+        weights.add_row(label + note, f"{share:.0%}")
+    console.print(weights)
 
 
 @app.command()

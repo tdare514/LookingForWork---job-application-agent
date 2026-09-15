@@ -45,6 +45,18 @@ deal-breakers, compensation floor, locations, work arrangement, visa status.
 Validated on load. A malformed profile is a hard failure, not a warning — a
 silently empty filter produces a shortlist of noise.
 
+The YAML file is an import, not the store. `jobagent profile set` validates it
+and writes the `profile` singleton; every filter and score reads the database.
+That is what makes `schema_version` and its upgrade chain load-bearing: a
+profile stored in September has to keep loading after the shape changes in
+November, mid-search, without the user re-editing a file to find out.
+
+Scoring weights live here rather than as constants, per
+[job-matching](job-matching.md). `semantic_fit` is in the schema and refuses a
+non-zero value: it needs an embedding model, a metered API is out of scope, and
+no local backend has been decided (#31). A weight that silently does nothing
+produces a score that looks complete.
+
 **Storage.** One embedded relational database file. Forward-only migrations,
 versioned in the repo, applied on startup. Generated documents live on disk
 next to it, referenced by path. Rationale: a single file is trivially backed up

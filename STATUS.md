@@ -11,11 +11,12 @@ Current focus: the resume source of truth and its truthfulness check are in. Nex
 - `jobagent init` / `status` / `pii` / `audit` — data directory outside the working tree at `0o700`, SQLite with forward-only migrations, append-only audit trail.
 - `jobagent add` / `list` / `board` — opportunities tracked one row each, with traffic lights: green sent, yellow wants attention today, red dead. Needs-action sorts first, then by deadline. De-duplicates across company-name variants.
 - Claude in Chrome handoff (`c` on the board): opens the posting and copies a prompt that carries my standing answers and forbids both submitting and inventing.
+- Profile (`profile.example.yaml`, `jobagent profile set` / `show`): what I am looking for — titles, seniority rungs, locations, must-have skills, deal-breakers, work authorization as a boolean the filters can read, and the scoring weights. The file is an import; the database is what the agent reads. An empty required field is refused, because an empty filter passes everything and looks like it is working.
 - Resume source of truth (`resume.example.yaml`, `jobagent resume validate`): every claim the agent may make, each accomplishment carrying its metric and the scope actually held.
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 201 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 226 tests. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
