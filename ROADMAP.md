@@ -1,190 +1,98 @@
-# Roadmap — January to April 2027
+# Roadmap — a two-week build
 
-Four phases, one per month, each ending in something usable. The ordering is
-deliberate: nothing in a later phase can be built safely until the storage and
-privacy foundations from Phase 1 exist.
+**Window: September 15 – September 28, 2026.** Personal tool, single user, built
+fast and used immediately.
 
-| Phase | Window | Theme | Ships |
+The original plan spread this over four months. That was wrong for the actual
+need: Winter 2027 co-op deadlines are live *now* (RBC and BMO close Sept 20,
+Scotiabank Oct 2), so a tool that ships in April is a tool that missed the
+season. Two weeks, four blocks, aggressively scoped.
+
+| Block | Days | Dates | Ships |
 | --- | --- | --- | --- |
-| 1 | Jan 4 – Jan 31 | Foundation, security, privacy | An agent that can hold your data safely and do nothing else |
-| 2 | Feb 1 – Feb 28 | Discovery and matching | A daily ranked shortlist of real postings |
-| 3 | Mar 1 – Mar 28 | Resume and application generation | Approved, tailored application packages |
-| 4 | Mar 29 – Apr 30 | Tracking, analytics, hardening | A tracked pipeline with funnel metrics and a clean exit path |
+| 1 | 1–3 | Sep 15–17 | Foundation: storage, profile, secrets, CLI, guardrails |
+| 2 | 4–7 | Sep 18–21 | Discovery and matching: a ranked shortlist |
+| 3 | 8–12 | Sep 22–26 | Resume tailoring and application packages |
+| 4 | 13–14 | Sep 27–28 | Tracking, funnel report, export/purge |
 
-Cross-cutting work — security review, docs, CI — is not a phase. It is a
-standing cost attached to every issue.
+## What "personal scale" changes
 
----
+The security and privacy model stays. It is not enterprise ceremony — this repo
+holds a real dossier: employment history, GPA, immigration status, and a record
+of which companies were approached while employed. That risk is the same at any
+team size.
 
-## Phase 1 — Foundation (January)
+What gets cut is process weight, not controls:
 
-**Goal:** a trustworthy container for personal data, plus the skeleton every
-later phase plugs into.
-
-Scope:
-- Runtime stack decision, recorded as an ADR before any code lands.
-- Package layout, linting, formatting, type checking, test harness, CI.
-- Configuration and profile schema — the declared description of what the user
-  wants, versioned and validated.
-- Local storage (embedded relational DB) with forward-only migrations.
-- Secrets handling: credentials come from the OS keychain or environment, never
-  from a file in the repo and never from the database.
-- PII inventory and retention policy, written down before data is collected.
-- Outbound request policy: per-source allowlist, rate limits, identifiable user
-  agent, respect for `robots.txt` and terms of service.
-- Structured logging and an append-only audit trail of agent actions.
-- Human-in-the-loop guardrail enforced at the architecture level: no code path
-  that transmits an application without a recorded approval.
-
-**Exit criteria**
-- `make check` runs lint, types, and tests green in CI on every push.
-- A profile can be loaded, validated, and stored; a bad profile fails loudly.
-- Secret scanning and dependency audit run in CI and block on findings.
-- The PII inventory lists every field the system will store, its purpose, and
-  its retention window.
-- A threat model document exists and names the accepted risks.
-
----
-
-## Phase 2 — Discovery and matching (February)
-
-**Goal:** every morning, a ranked shortlist worth reading.
-
-Scope:
-- Source adapter interface: fetch, paginate, map to the canonical job schema,
-  declare its own rate limit and terms constraints.
-- Two adapters implemented end to end, chosen for coverage of the target market.
-- Canonical job schema plus de-duplication — the same role reposted across
-  sources and weeks collapses to one record with a history.
-- Requirement extraction: pull skills, seniority, compensation band, and work
-  arrangement out of free-text descriptions.
-- Match scoring: a hybrid of explicit rules (hard filters — location, visa,
-  compensation floor) and semantic similarity against the profile, with the
-  score decomposed so a low score is explainable.
-- Shortlist generation, filters, and a daily digest.
-
-**Exit criteria**
-- A scheduled run ingests from both adapters, de-duplicates, scores, and writes
-  a shortlist without manual intervention.
-- Every score is explainable: the digest shows which components drove it.
-- Scoring is regression-tested against a fixture set of labeled postings.
-- Rate limits are enforced by the framework, not by adapter discipline.
-
----
-
-## Phase 3 — Resume and application generation (March)
-
-**Goal:** turn a shortlisted role into an application package a human is willing
-to send.
-
-Scope:
-- Structured resume as the single source of truth — every claim the agent can
-  make lives here, with dates and evidence.
-- Tailoring engine: selects and reorders existing facts for a target posting.
-  Constrained so generated text cannot introduce a claim absent from the source
-  of truth; violations fail the build of that package.
-- Cover letter generation with tone and length controls.
-- Answer library for recurring application questions, reused rather than
-  regenerated.
-- Rendering and export to PDF and DOCX with a stable, ATS-readable layout.
-- Approval workflow: package assembled, diffed against the source of truth,
-  presented for review, approved or rejected with a reason.
-
-**Exit criteria**
-- A shortlisted job yields a complete package: tailored resume, cover letter,
-  and prefilled question answers.
-- The truthfulness check has test coverage proving a fabricated claim is caught.
-- Rejected packages record why, and the reason feeds back into tailoring.
-- Exported documents survive a round trip through a common ATS parser.
-
----
-
-## Phase 4 — Tracking, analytics, and hardening (late March to April)
-
-**Goal:** know the state of every application, and leave the system in a state
-that can be handed over or deleted.
-
-Scope:
-- Application tracker: one record per application, with an explicit state
-  machine (drafted, approved, submitted, acknowledged, screening, interviewing,
-  offer, rejected, withdrawn, stale).
-- Read-only status ingestion from a mail account to suggest state transitions,
-  never to apply them silently.
-- Follow-up scheduling and reminders driven by time in state.
-- Funnel analytics: conversion at each stage, cut by source, role type, and
-  match score, so the next month's effort goes where it converts.
-- Backup, full export, and a verified delete path.
-- Release hardening: dependency pinning, a security review of the whole surface,
-  and an operational runbook.
-
-**Exit criteria**
-- No application can be in an unknown state; staleness is detected, not guessed.
-- The funnel report answers "which sources are worth my February" with data.
-- `export` produces a portable archive; `purge` provably removes stored PII.
-- A final security review is complete with findings resolved or accepted in
-  writing.
-
----
-
-## Issue map
-
-Each phase has a tracking epic listing its tasks. Task issues carry the phase
-label plus an area label (`architecture`, `security`, `privacy`, `matching`,
-`resume`, `tracking`, `infra`, `docs`).
-
-**Phase 1 — Foundation (#1)**
-
-| # | Task |
+| Cut | Why |
 | --- | --- |
-| 5 | Decide and record the runtime stack (ADR 0002) — blocks everything below |
-| 6 | Scaffold the project: layout, lint, format, typecheck, tests |
-| 7 | CI pipeline with dependency audit and secret scanning |
-| 8 | Profile schema and configuration loader |
-| 9 | Local storage layer and forward-only migrations |
-| 15 | Secrets handling: OS keychain, never files or the database |
-| 21 | PII inventory and data retention policy |
-| 22 | Outbound request policy and central rate limiter |
-| 23 | Structured logging and append-only audit trail |
-| 24 | Make the human approval gate structural (ADR 0004) |
-| 25 | LLM client boundary with PII minimization and spend tracking |
-| 26 | CLI skeleton and command surface |
+| Blocking CI with dependency audit and secret scanning (#7) | Reduced to one workflow running tests. A solo build gets its safety from the pre-commit hook and `.gitignore`, not from branch protection. |
+| Standalone PII inventory document (#21) | Folded into the storage schema (#9) as annotations. Same information, one artifact instead of two. |
+| Read-only mail ingestion (#39) | Deferred. OAuth setup alone costs a day, and manual status updates are fine at this volume. |
 
-**Phase 2 — Discovery and matching (#2)**
+Everything else ships.
 
-| # | Task |
-| --- | --- |
-| 27 | Source adapter interface |
-| 28 | Canonical job schema and de-duplication |
-| 29 | Implement the first two source adapters |
-| 30 | Requirement extraction from posting descriptions |
-| 31 | Hard filters and decomposed match scoring |
-| 32 | Daily shortlist, filters, and digest |
+---
 
-**Phase 3 — Resume and applications (#3)**
+## Block 1 — Foundation (Days 1–3, Sep 15–17)
 
-| # | Task |
-| --- | --- |
-| 33 | Structured resume as the single source of truth |
-| 34 | Resume tailoring engine with a truthfulness constraint |
-| 35 | Cover letter generation and the answer library |
-| 36 | Document rendering to ATS-readable PDF and DOCX |
-| 37 | Application package assembly and the review workflow |
+Python, SQLite, Typer CLI. The container for the data and the guardrails that
+keep it from leaking.
 
-**Phase 4 — Tracking and hardening (#4)**
+- **Day 1** — #5 stack ADR · #6 scaffold · #9 storage and migrations
+- **Day 2** — #8 profile schema · #15 secrets · #26 CLI surface
+- **Day 3** — #23 logging and audit trail · #25 LLM boundary · #22 rate limiter · #24 approval gate
 
-| # | Task |
-| --- | --- |
-| 38 | Application tracker and state machine |
-| 39 | Read-only mail ingestion that suggests state transitions |
-| 40 | Follow-up scheduling and reminders |
-| 41 | Funnel analytics and the effectiveness report |
-| 42 | Backup, export, and a verified purge |
-| 43 | Release hardening: security review and operational runbook |
+**Done when:** a profile loads and validates, the database is created outside the
+working tree, secrets resolve from the environment, and no submission path exists
+without a recorded approval.
 
-An issue is done when its acceptance criteria are checked, tests cover the
-behavior, and any user-visible change is documented.
+## Block 2 — Discovery and matching (Days 4–7, Sep 18–21)
 
-## Open decisions
+- **Day 4** — #27 adapter interface · #28 canonical schema and de-duplication
+- **Day 5** — #29 first two source adapters
+- **Day 6** — #30 requirement extraction
+- **Day 7** — #31 hard filters and scoring · #32 shortlist and digest
 
-Tracked as ADRs in [`docs/adr/`](docs/adr/). The first one to settle is the
-runtime stack (#5) — it blocks everything in Phase 1.
+**Done when:** one command ingests, de-duplicates, scores, and prints a ranked
+shortlist with an explainable score breakdown.
+
+## Block 3 — Resume and applications (Days 8–12, Sep 22–26)
+
+Seeded from real material: the existing resume, cover letter, and SOI drafts.
+
+- **Day 8** — #33 resume source of truth
+- **Day 9** — #34 tailoring with the truthfulness constraint
+- **Day 10** — #35 cover letters and answer library
+- **Day 11** — #36 PDF and DOCX rendering
+- **Day 12** — #37 package assembly and review
+
+**Done when:** a shortlisted role produces a tailored resume and cover letter
+that pass the truthfulness check, render to ATS-readable PDF and DOCX, and wait
+at the approval gate.
+
+## Block 4 — Tracking and wrap-up (Days 13–14, Sep 27–28)
+
+- **Day 13** — #38 tracker and state machine · #40 follow-up scheduling
+- **Day 14** — #41 funnel report · #42 export and purge · #43 runbook
+
+**Done when:** every application has a known state, the funnel report runs on
+partial data, and `purge` provably removes the dossier.
+
+---
+
+## Deferred
+
+Tracked, labeled `deferred`, not in the two weeks:
+
+- #39 — read-only mail ingestion for status transitions
+- Additional source adapters beyond the first two
+- Embedding-based semantic scoring, if rule-based scoring proves good enough
+
+## Reference
+
+- [`docs/architecture.md`](docs/architecture.md)
+- [`docs/security-privacy.md`](docs/security-privacy.md)
+- [`docs/job-matching.md`](docs/job-matching.md)
+- [`docs/application-tracking.md`](docs/application-tracking.md)
+- [`docs/adr/`](docs/adr/)

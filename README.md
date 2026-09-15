@@ -1,7 +1,7 @@
 # LookingForWork — Job Application Agent
 
-A personal, human-in-the-loop agent that runs a focused job search from
-**January through April 2027**: it finds relevant roles, scores them against a
+A personal, human-in-the-loop agent for a focused job search, built in
+**a two-week sprint (Sept 15–28, 2026)**: it finds relevant roles, scores them against a
 declared profile, drafts tailored resumes and cover letters, and tracks every
 application through to an outcome.
 
@@ -12,9 +12,9 @@ constraint rather than a default setting.
 
 ## Status
 
-Planning. No implementation yet — the [roadmap](ROADMAP.md) and the [issue
-tracker](../../issues) are the current source of truth. Work is organized as four
-phase epics (#1–#4) with 29 task issues beneath them.
+In build. Two-week sprint running **Sept 15–28, 2026**, tracked as four block
+epics (#1–#4) over 29 task issues. See [`ROADMAP.md`](ROADMAP.md) for the
+day-by-day schedule and what was cut to fit the window.
 
 ## What it does
 

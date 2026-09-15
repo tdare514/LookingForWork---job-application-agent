@@ -33,3 +33,7 @@ node_modules/
 .DS_Store
 .idea/
 .vscode/
+
+# Local virtualenvs
+.venv/
+venv/
