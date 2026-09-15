@@ -12,7 +12,10 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from jobagent.application.answers import standing_answers
+from jobagent.application.package import build as build_package
 from jobagent.application.resume import load as load_resume
+from jobagent.application.tailor import Posting
 from jobagent.core.paths import default_data_dir, ensure_data_dir
 from jobagent.core.pii import REGISTRY
 from jobagent.core.storage import Storage
@@ -150,6 +153,67 @@ def resume_validate(
             f"[yellow]{len(unmeasured)} accomplishment(s) carry no metric.[/yellow] "
             "That is allowed — tailoring will not invent one."
         )
+
+
+@app.command()
+def draft(
+    job_id: int = typer.Argument(..., help="Board row to draft for (see `jobagent list`)."),
+    description: Path = typer.Option(
+        None, "--description", "-D", help="File with the posting text, for better targeting."
+    ),
+    resume_path: Path = typer.Option(None, "--resume", help="Defaults to <data dir>/resume.yaml."),
+    bullets: int = typer.Option(4, "--bullets", help="Max bullets per role."),
+) -> None:
+    """Build a complete application package: tailored resume, cover letter, answers."""
+    data_dir = default_data_dir()
+    target = resume_path or (data_dir / "resume.yaml")
+    try:
+        resume = load_resume(target)
+    except FileNotFoundError:
+        console.print(f"[red]No resume at[/red] {target}")
+        console.print("Start from the example: [bold]cp resume.example.yaml[/bold] " + str(target))
+        raise typer.Exit(code=1) from None
+
+    with Storage() as store:
+        job = BoardRepo(store).get(job_id)
+    if job is None:
+        console.print(f"[red]No job {job_id} on the board.[/red]")
+        raise typer.Exit(code=1)
+
+    posting = Posting(
+        company=job.company,
+        title=job.title,
+        description=description.read_text() if description else "",
+    )
+    library = standing_answers(
+        authorization="Authorized to work in Canada; no sponsorship required.",
+        availability="Available from January 2027 for the Winter 2027 term.",
+        term_lengths="4, 8 or 12 months.",
+        notice="None - available at the start of the term.",
+        compensation="Open to the posted range for this role.",
+        relocation="Based in Mississauga, ON; able to commute to Toronto offices.",
+    )
+
+    out_dir = data_dir / "packages" / f"{job.id}-{job.company.lower().replace(' ', '-')}"
+    package = build_package(resume, posting, library, out_dir, max_bullets_per_role=bullets)
+
+    with Storage() as store:
+        store.append_audit(
+            "package.build",
+            {"job_id": job.id, "company": job.company, "directory": str(out_dir)},
+        )
+
+    table = Table(title=f"Package ready — {job.company}")
+    table.add_column("Item")
+    table.add_column("Value")
+    for label, value in package.summary():
+        table.add_row(label, value)
+    console.print(table)
+    console.print(f"\n[green]Written to[/green] {out_dir}")
+    console.print(
+        "[yellow]Two things still need you:[/yellow] the company paragraph in the "
+        "cover letter, and the 'why this company' answer."
+    )
 
 
 @app.command()

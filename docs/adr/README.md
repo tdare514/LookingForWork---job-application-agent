@@ -12,3 +12,4 @@ that supersedes the old one.
 | [0004](0004-human-approval-gate.md) | Human approval gate is structural | Accepted |
 | [0005](0005-board-first-claude-in-chrome.md) | Board first, Claude in Chrome for applying | Accepted |
 | [0006](0006-repository-as-project-memory.md) | The repository is the project memory | Accepted |
+| [0007](0007-document-rendering-stack.md) | Document rendering stack | Accepted |
