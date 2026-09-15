@@ -9,8 +9,8 @@ nothing.
 
 from __future__ import annotations
 
+from jobagent.core.vocabulary import Seniority
 from jobagent.matching.normalize import (
-    Seniority,
     dedupe_key,
     normalize_company,
     normalize_location,

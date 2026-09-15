@@ -10,6 +10,7 @@ No feature code executes SQL directly; it goes through ``Storage``.
 from __future__ import annotations
 
 import json
+import re
 import sqlite3
 from collections.abc import Iterator
 from contextlib import contextmanager
@@ -24,6 +25,14 @@ from jobagent.core.paths import database_path
 # Secrets never reach this database. They resolve from the keychain or the
 # environment (#15); a shared code path between the two is a bug with a test.
 FORBIDDEN_COLUMN_SUBSTRINGS = ("secret", "token", "password", "api_key", "apikey")
+
+# Credential shapes, in values rather than keys. Deliberately narrow, matching
+# scripts/check_context.py: a check that fires on ordinary prose gets disabled,
+# and a disabled check protects nothing.
+SECRET_VALUE = re.compile(
+    r"(sk-[A-Za-z0-9]{16,}|ghp_[A-Za-z0-9]{20,}|AKIA[0-9A-Z]{16}"
+    r"|-----BEGIN [A-Z ]*PRIVATE KEY-----)"
+)
 
 
 def utcnow() -> str:
@@ -117,7 +126,7 @@ class Storage:
     def put_singleton(self, table: str, payload: dict[str, Any], version: int) -> None:
         if table not in {"profile", "resume"}:
             raise ValueError(f"not a singleton table: {table}")
-        _reject_secret_shaped(payload)
+        reject_secret_shaped(payload)
         with self.transaction() as conn:
             conn.execute(
                 f"INSERT INTO {table} (id, payload, version, updated_at) VALUES (1, ?, ?, ?) "
@@ -167,25 +176,37 @@ class Storage:
         return int(row[0])
 
 
-def _reject_secret_shaped(payload: dict[str, Any]) -> None:
-    """Refuse a write whose keys look like credentials.
+def reject_secret_shaped(payload: dict[str, Any]) -> None:
+    """Refuse a payload that looks like it is carrying a credential.
 
     Cheap, and it catches the realistic accident: an API key pasted into a
     profile file and saved straight into the dossier.
+
+    Both halves are needed. A key named `api_key` is the careless case; a value
+    that is a key under an innocent name like `notes` is the one that actually
+    happens, because the person pasting it is not thinking about the field name.
+    Callers may run this before a write (`put_singleton`) or at load, so a
+    validate command can refuse without touching the database.
     """
-    for key in _walk_keys(payload):
+    for key, value in _walk(payload):
         lowered = key.lower()
         if any(bad in lowered for bad in FORBIDDEN_COLUMN_SUBSTRINGS):
             raise SecretLeakError(
                 f"refusing to store {key!r}: credentials belong in the keychain, not the database"
             )
+        if isinstance(value, str) and SECRET_VALUE.search(value):
+            raise SecretLeakError(
+                f"the value of {key!r} looks like a credential: credentials belong in the "
+                "keychain or the environment, never in a file and never in the database"
+            )
 
 
-def _walk_keys(value: Any) -> Iterator[str]:
+def _walk(value: Any, key: str = "<root>") -> Iterator[tuple[str, Any]]:
+    """Every (key, value) pair in a nested structure, keys carrying their name."""
+    yield key, value
     if isinstance(value, dict):
         for k, v in value.items():
-            yield str(k)
-            yield from _walk_keys(v)
+            yield from _walk(v, str(k))
     elif isinstance(value, list):
         for item in value:
-            yield from _walk_keys(item)
+            yield from _walk(item, key)
