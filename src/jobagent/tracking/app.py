@@ -36,6 +36,10 @@ from jobagent.tracking.repo import BoardRepo
 class Board(App[None]):
     CSS = """
     Screen { background: $surface; }
+    /* Two one-line widgets. Without an explicit height the container takes an
+       equal 1fr share alongside the table, which cost the board half the
+       terminal -- and more of it the taller the terminal got. */
+    #meta { height: auto; }
     #summary { padding: 0 1; height: 1; color: $text-muted; }
     #status { padding: 0 1; height: 1; color: $text; }
     DataTable { height: 1fr; }
@@ -65,7 +69,7 @@ class Board(App[None]):
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=False)
-        yield Container(Static("", id="summary"), Static("", id="status"))
+        yield Container(Static("", id="summary"), Static("", id="status"), id="meta")
         yield DataTable(cursor_type="row", zebra_stripes=True)
         yield Footer()
 
