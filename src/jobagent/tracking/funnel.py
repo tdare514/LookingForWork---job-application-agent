@@ -22,6 +22,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, date, datetime
 
 from jobagent.tracking.board import State
+from jobagent.tracking.followups import STALE_AFTER_DAYS
 from jobagent.tracking.repo import Job
 
 # Below this many observations, a percentage is not evidence. Chosen because a
@@ -175,7 +176,12 @@ def build(jobs: list[Job], *, today: date | None = None) -> Report:
         rejected=counts.get(State.REJECTED, 0),
         skipped=counts.get(State.SKIPPED, 0),
         untriaged=counts.get(State.NEW, 0),
-        stale=sum(1 for j in jobs if (d := _days_in_state(j, today)) is not None and d >= 30),
+        # The same threshold the follow-up rules use, imported rather than
+        # repeated: a report that called a row fresh while the board was
+        # nagging about it would be two answers to one question.
+        stale=sum(
+            1 for j in jobs if (d := _days_in_state(j, today)) is not None and d >= STALE_AFTER_DAYS
+        ),
         by_company=by_company,
         median_days_in_state=median,
     )

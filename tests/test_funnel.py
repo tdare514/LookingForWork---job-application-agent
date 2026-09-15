@@ -12,6 +12,7 @@ from datetime import UTC, datetime, timedelta
 
 from jobagent.core.storage import Storage
 from jobagent.tracking.board import State
+from jobagent.tracking.followups import STALE_AFTER_DAYS, due
 from jobagent.tracking.funnel import SMALL_SAMPLE, build
 from jobagent.tracking.repo import BoardRepo
 
@@ -134,6 +135,22 @@ def test_stale_rows_are_counted(store: Storage) -> None:
     _add(store, "Fresh", State.APPLIED, days_ago=1)
     report = build(BoardRepo(store).all())
     assert report.stale == 1
+
+
+def test_the_report_and_the_board_agree_on_stale(store: Storage) -> None:
+    """One threshold, not two.
+
+    The report used to carry its own literal 30. Nothing failed when they
+    matched, and nothing would have failed on the day they stopped: the board
+    would nag about a row the report called fresh, and the only symptom is a
+    number quietly disagreeing with the screen next to it.
+    """
+    _add(store, "Just stale", State.APPLIED, days_ago=STALE_AFTER_DAYS)
+    _add(store, "Just fresh", State.APPLIED, days_ago=STALE_AFTER_DAYS - 1)
+    jobs = BoardRepo(store).all()
+
+    assert build(jobs).stale == 1
+    assert [f.job.company for f in due(jobs) if f.stale] == ["Just stale"]
 
 
 def test_median_time_in_state_is_reported(store: Storage) -> None:
