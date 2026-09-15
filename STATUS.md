@@ -46,6 +46,7 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 - Scoring totals are strictly comparable only between postings measured on the same components. Every score records which ones those were, and `jobagent score` prints the count per row — a row scored on 2 of 5 is a thinner judgement than one scored on 4.
 - Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
+- No `--json` output and no global flags (`--config`, `--data-dir`, `--verbose`). Every command prints a Rich table, so nothing composes — no piping into `jq`. The data directory is settable only through `JOBAGENT_DATA_DIR`. Four phases landed without the surface #26 meant to fix early, so retrofitting it now spans nineteen commands.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.
 
