@@ -198,3 +198,31 @@ def test_a_missing_clipboard_tool_does_not_quit_the_board(
             assert (app._package_dir(job_id) / "claude-prompt.txt").is_file()
 
     asyncio.run(drive())
+
+
+async def test_the_table_gets_the_screen_not_the_header(data_dir: object) -> None:
+    """The board is the table. Two header lines may not take half the terminal.
+
+    Pinned at two sizes because the failure this guards scaled with the
+    terminal: an unset container height took an equal `1fr` share, so a taller
+    window spent more of itself on blank space, not more rows.
+    """
+    from textual.containers import Container
+    from textual.widgets import DataTable
+
+    from jobagent.tracking.app import Board
+
+    with Storage() as setup:
+        BoardRepo(setup).add("BMO", "Business Analyst")
+
+    for height in (24, 40):
+        app = Board()
+        async with app.run_test(size=(100, height)) as pilot:
+            await pilot.pause()
+            meta = app.query_one("#meta", Container)
+            table = app.query_one(DataTable)
+            assert meta.size.height <= 2, (
+                f"the header holds two one-line widgets but took "
+                f"{meta.size.height} rows at height {height}"
+            )
+            assert table.size.height > height // 2
