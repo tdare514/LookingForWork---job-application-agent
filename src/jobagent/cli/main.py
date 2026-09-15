@@ -379,6 +379,76 @@ def _with_detail(
 
 
 @app.command()
+def extract(
+    job_id: int = typer.Argument(None, help="One job, or omit for every job with a description."),
+    show: bool = typer.Option(False, "--show", help="Print what was extracted."),
+) -> None:
+    """Pull structured requirements out of stored posting text.
+
+    Rule-based and free to run. Re-running is safe: extractions are appended, so
+    the history of what each ruleset version found stays intact.
+    """
+    from jobagent.matching.extract import RULESET_VERSION
+    from jobagent.matching.extract import extract as run_extract
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        targets = repo.jobs_with_descriptions()
+        if job_id is not None:
+            targets = [(jid, text) for jid, text in targets if jid == job_id]
+            if not targets:
+                console.print(
+                    f"[yellow]Job {job_id} has no stored description.[/yellow] "
+                    "Run `jobagent fetch <source> --details` first."
+                )
+                raise typer.Exit(code=1)
+
+        if not targets:
+            console.print("[yellow]No postings have descriptions yet.[/yellow]")
+            console.print("Run [bold]jobagent fetch <source> --details[/bold] to pull them.")
+            return
+
+        done = failed = 0
+        for jid, text in targets:
+            try:
+                requirements = run_extract(text)
+            except Exception as exc:  # one bad posting must not abort the run (#30)
+                console.print(f"[yellow]Job {jid} could not be extracted:[/yellow] {exc}")
+                failed += 1
+                continue
+            repo.save_requirements(jid, requirements)
+            done += 1
+            if show:
+                job = repo.get(jid)
+                console.print(
+                    f"\n[bold]{job.company if job else jid} — {job.title if job else ''}[/bold]"
+                )
+                console.print(f"  required : {', '.join(requirements.required_skills) or '—'}")
+                console.print(f"  preferred: {', '.join(requirements.preferred_skills) or '—'}")
+                years = (
+                    f"{requirements.min_years}-{requirements.max_years}"
+                    if requirements.min_years is not None
+                    else "—"
+                )
+                band = (
+                    f"{requirements.compensation_min:,}-{requirements.compensation_max:,}"
+                    f" {requirements.currency or ''}".strip()
+                    if requirements.compensation_min is not None
+                    else "not stated"
+                )
+                console.print(f"  years    : {years}    pay: {band}")
+                console.print(
+                    f"  closes   : {requirements.application_deadline or '—'}"
+                    f"    arrangement: {requirements.work_arrangement or '—'}"
+                )
+        store.append_audit("extract", {"jobs": done, "ruleset": RULESET_VERSION})
+
+    console.print(f"\n[green]Extracted {done}[/green] posting(s) with {RULESET_VERSION}.")
+    if failed:
+        console.print(f"[yellow]{failed} failed[/yellow] and were skipped.")
+
+
+@app.command()
 def report() -> None:
     """Funnel: what is converting, and what is not."""
     from jobagent.tracking.funnel import SMALL_SAMPLE

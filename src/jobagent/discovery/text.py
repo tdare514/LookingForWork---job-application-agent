@@ -89,5 +89,24 @@ def html_to_text(html: str | None) -> str:
     # Non-breaking spaces survive entity decoding and break every later regex.
     joined = joined.replace("\xa0", " ")
     lines = [_SPACES.sub(" ", line).strip() for line in joined.splitlines()]
-    collapsed = "\n".join(line for line in lines if line)
-    return _BLANK_RUN.sub("\n\n", collapsed).strip()
+    lines = _rejoin_orphan_markers([line for line in lines if line])
+    return _BLANK_RUN.sub("\n\n", "\n".join(lines)).strip()
+
+
+def _rejoin_orphan_markers(lines: list[str]) -> list[str]:
+    """Reattach a list marker to text that landed on the next line.
+
+    A `<li>` whose content is wrapped in a nested element emits the "-" and the
+    text separately. TD does this, and it costs the bullet: a stranded "-" is an
+    empty bullet, and the requirement under it stops looking like a requirement
+    at all.
+    """
+    out: list[str] = []
+    pending = False
+    for line in lines:
+        if line == "-":
+            pending = True
+            continue
+        out.append(f"- {line}" if pending else line)
+        pending = False
+    return out
