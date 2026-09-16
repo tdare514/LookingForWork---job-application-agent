@@ -153,6 +153,15 @@ class BoardRepo:
         assert job is not None
         return job, True
 
+    def find(self, company: str, title: str, location: str | None = None) -> Job | None:
+        """The row this role is already on the board as, if it is.
+
+        Public so that feature code asking "do I already have this?" gets the
+        board's own answer, rather than inventing a second notion of sameness --
+        which is how a tracker starts showing one job twice.
+        """
+        return self._match(company, title, dedupe_key(company, title, location))
+
     def _match(self, company: str, title: str, key: str) -> Job | None:
         """Find the job this posting already is, if any.
 
