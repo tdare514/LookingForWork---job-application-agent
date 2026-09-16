@@ -20,6 +20,9 @@
     "  'cut' is what makes an over-eager filter visible: if seniority starts swallowing",
     "  rows that location used to cut, the rule name changes and the test says so.",
     "",
+    "R-0000187520 was revised from 'pursue' to 'borderline' on 2026-09-16 (#76). Its",
+    "  entry carries the reasoning and a disclosure about who wrote the original label.",
+    "",
     "The profile these are judged against is build_profile() in tests/test_ranking.py.",
     "Changing that profile changes every label here, so change both together."
   ],
@@ -29,8 +32,9 @@
       "why": "The target role exactly: a Winter 2027 RBC risk internship in Toronto, asking for SQL, Excel and risk vocabulary the profile has."
     },
     "R-0000187520": {
-      "label": "pursue",
-      "why": "Same shape and season -- an RBC Winter 2027 internship in Toronto. The skill match is weaker than the credit risk posting, and it should rank below it, but a Toronto co-op posting in the target term is never a skip."
+      "label": "borderline",
+      "why": "Structurally a pursue -- RBC, Winter 2027, Toronto, four months, inside Group Risk Management. The work is not. This is sanctions compliance screening, and its must-haves are 'Financial Industry Compliance experience', 'Prior experience as a sanctions investigator/payments analyst at a Canadian Financial Institution' and 'Regulatory Compliance Professional in Financial Institution', with '2+ years experience in Sanctions Investigations operations' among the nice-to-haves -- on an internship. The only overlap with the profile is Python, nice-to-have. Right company and term, wrong domain, asking for experience the candidate does not have.",
+      "label_revised": "2026-09-16 (#76), from 'pursue'. The earlier reasoning was 'a Toronto co-op posting in the target term is never a skip' -- true, and it does not settle the question, because borderline is not skip. DISCLOSURE: the author of that label also wrote the borderline assertion that had no row to run against, so check the quoted must-haves above rather than taking this on trust."
     },
     "R_1499218": {
       "filtered_by": "location",
