@@ -213,6 +213,28 @@ scoring change that flips a clear case fails CI. The corpus is twelve real RBC,
 BMO and TD postings in `tests/fixtures/`, labelled by hand in
 `ranking_labels.json` and exercised by `tests/test_ranking.py`.
 
+**Growing the corpus needs a machine with network access.** A build container
+cannot do it: its proxy refuses `rbc.wd3.myworkdayjobs.com` and every other job
+board at the CONNECT stage, before a request is made, so the failure is not a
+tenant declining and no adapter change helps. On a machine that can reach them:
+
+```
+export JOBAGENT_DATA_DIR=/tmp/corpus-capture   # not the real board
+jobagent init
+jobagent fetch workday:rbc --details --limit 50
+python3 scripts/capture_postings.py --new-only
+```
+
+That prints fixture-shaped JSON to stdout and writes nothing. It emits only
+employer-published fields — never notes, state, skip reasons or URLs — and the
+allowlist enforcing that lives in `BoardRepo.FIXTURE_FIELDS`, beside the query
+rather than in the script, because a script can be bypassed. These fixtures go
+into a public repository; `tests/test_capture.py` is what keeps the path narrow.
+
+Labels are still written by hand afterwards, by reading the posting text. That
+is not a step to automate: a label copied from the extractor's output measures
+the extractor against itself.
+
 No absolute score is asserted. Pinning "the credit risk intern scores 0.53"
 would fail on every honest change to the weights and teach whoever is on call to
 update the number rather than read it. What is pinned is the relationships:
