@@ -92,6 +92,15 @@ def filtered_labels() -> list[tuple[str, str]]:
 # -- the corpus itself ----------------------------------------------------
 
 
+@pytest.mark.parametrize("kind", ["pursue", "borderline", "skip"])
+def test_every_scored_tier_has_a_real_posting(kind: str) -> None:
+    """An empty verdict tier removes coverage, so fail rather than skip."""
+    assert labelled(kind), (
+        f"the ranking corpus needs at least one {kind} posting; "
+        "read the posting text to label it, not the scorer's output"
+    )
+
+
 def test_every_posting_carries_a_label() -> None:
     """An unlabelled posting is silently excluded from every assertion below."""
     unlabelled = set(load_postings()) - set(load_labels())
@@ -168,9 +177,9 @@ def test_a_borderline_row_still_beats_the_clear_skips() -> None:
     that is genuinely uncertain, and fail on every honest tuning change.
     """
     borderline = labelled("borderline")
-    if not borderline:
-        pytest.skip("no borderline rows in the corpus")
+    assert borderline, "the ranking corpus needs at least one borderline posting"
     skips = [evaluate(sid)[1] for sid in labelled("skip")]
+    assert skips, "the ranking corpus needs at least one skip posting"
     for source_id in borderline:
         assert evaluate(source_id)[1] > max(skips), (
             f"borderline {source_id} fell below a clear skip"
