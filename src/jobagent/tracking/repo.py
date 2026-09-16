@@ -6,7 +6,7 @@ import hashlib
 import json
 from dataclasses import dataclass
 from datetime import date
-from typing import Any
+from typing import Any, ClassVar
 
 from jobagent.core.storage import Storage, utcnow
 from jobagent.matching.extract import Requirements
@@ -249,6 +249,77 @@ class BoardRepo:
             (job_id,),
         )
         return [Sighting(**dict(r)) for r in rows]
+
+    # The only columns that may leave the data directory for the public repo's
+    # test fixtures. Every one is text the employer published; none of them is
+    # a judgement, a state, or anything the user typed.
+    #
+    # This tuple is the whole safety property, so it lives here beside the SQL
+    # rather than in the script that prints it -- a script can be bypassed, a
+    # repository method is where the data actually comes from. A test asserts
+    # it matches the fixture shape and excludes every personal column, so
+    # adding a column to `jobs` cannot silently widen what gets published.
+    FIXTURE_FIELDS: ClassVar[tuple[str, ...]] = (
+        "source",
+        "source_id",
+        "title",
+        "company",
+        "location",
+        "deadline",
+        "employment_type",
+        "description",
+    )
+
+    # Named rather than merely absent, so the test can assert on them by name
+    # and a reader can see what was considered and refused.
+    NEVER_EXPORTED: ClassVar[tuple[str, ...]] = (
+        "notes",
+        "state",
+        "state_reason",
+        "snoozed_until",
+        "url",
+        "first_seen_at",
+        "state_changed_at",
+    )
+
+    def fixture_rows(self) -> list[dict[str, Any]]:
+        """Board rows reduced to employer-published text, for the eval corpus.
+
+        The ranking and extraction corpora need real postings, and the only
+        machine that can fetch them is the one with network access -- not a
+        build container, where the proxy refuses the tenant hosts outright.
+        So the path is: fetch on your own machine, then read this out.
+
+        Only rows carrying a description are returned. A label in those corpora
+        has to be read off the posting text, so a row without text cannot be
+        labelled honestly and would only break `test_every_posting_carries_a_label`.
+
+        `employment_type` comes back None: it lives on the adapter's
+        `RawPosting` and the board never persists it. Null is the honest answer
+        rather than a guess.
+        """
+        rows = self.store.connect().execute(
+            "SELECT j.id, j.title, j.company, j.location, j.deadline, j.description,"
+            " (SELECT s.source FROM job_sightings s WHERE s.job_id = j.id"
+            "  ORDER BY s.id LIMIT 1) AS source,"
+            " (SELECT s.source_id FROM job_sightings s WHERE s.job_id = j.id"
+            "  ORDER BY s.id LIMIT 1) AS source_id"
+            " FROM jobs j WHERE j.description IS NOT NULL AND j.description != ''"
+            " ORDER BY j.id"
+        )
+        return [
+            {
+                "source": r["source"] or "manual",
+                "source_id": r["source_id"] or f"local-{r['id']}",
+                "title": r["title"],
+                "company": r["company"],
+                "location": r["location"],
+                "deadline": r["deadline"],
+                "employment_type": None,
+                "description": r["description"],
+            }
+            for r in rows
+        ]
 
     def sources_by_job(self) -> dict[int, set[str]]:
         """Which sources have shown each role. One job can come from several."""
