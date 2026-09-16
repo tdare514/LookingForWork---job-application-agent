@@ -6,6 +6,7 @@ foundation works: initialise the data directory, show status, read the audit log
 
 from __future__ import annotations
 
+from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
@@ -561,34 +562,17 @@ def score_cmd(
     The ranked table here is deliberately plain. The daily digest -- thresholds,
     score movement, reposts, what the filters removed in aggregate -- is #32.
     """
-    from jobagent.matching.filters import apply_filters
-    from jobagent.matching.score import score as run_score
-
     with Storage() as store:
         repo = BoardRepo(store)
-        profile = load_stored_profile(store)
-        if profile is None:
-            console.print("[yellow]No profile set.[/yellow] Every filter and weight reads it.")
-            console.print("Run [bold]jobagent profile set <file.yaml>[/bold] first.")
-            raise typer.Exit(code=1)
+        profile = _profile_or_exit(store)
 
-        rows = repo.scoring_rows()
-        if not rows:
+        if not repo.scoring_rows():
             console.print("[yellow]Nothing on the board yet.[/yellow] Add or fetch a role first.")
             return
-
-        for job_id, listing, posted_at in rows:
-            stored = repo.latest_requirements(job_id)
-            requirements = Requirements() if stored is None else Requirements.from_dict(stored)
-            verdict = apply_filters(listing, requirements, profile)
-            result = run_score(
-                listing, requirements, profile, posted_at, extracted=stored is not None
-            )
-            repo.save_score(job_id, result, verdict)
+        _score_everything(repo, profile, store)
 
         latest = repo.latest_scores()
         cut = sum(1 for r in latest.values() if r["filtered"])
-        store.append_audit("score", {"jobs": len(rows), "filtered": cut})
 
         if explain is not None:
             _explain_score(repo, latest, explain)
@@ -686,6 +670,288 @@ def _explain_score(repo: BoardRepo, latest: dict[int, Any], job_id: int) -> None
         )
 
 
+def _profile_or_exit(store: Storage) -> Profile:
+    profile = load_stored_profile(store)
+    if profile is None:
+        console.print("[yellow]No profile set.[/yellow] Every filter and weight reads it.")
+        console.print("Run [bold]jobagent profile set <file.yaml>[/bold] first.")
+        raise typer.Exit(code=1)
+    return profile
+
+
+def _score_everything(repo: BoardRepo, profile: Profile, store: Storage) -> int:
+    """Filter and score every row. Shared by `score` and `daily`."""
+    from jobagent.matching.filters import apply_filters
+    from jobagent.matching.score import score as run_score
+
+    rows = repo.scoring_rows()
+    for job_id, listing, posted_at in rows:
+        stored = repo.latest_requirements(job_id)
+        requirements = Requirements() if stored is None else Requirements.from_dict(stored)
+        verdict = apply_filters(listing, requirements, profile)
+        result = run_score(listing, requirements, profile, posted_at, extracted=stored is not None)
+        repo.save_score(job_id, result, verdict)
+    cut = sum(1 for r in repo.latest_scores().values() if r["filtered"])
+    store.append_audit("score", {"jobs": len(rows), "filtered": cut})
+    return len(rows)
+
+
+@app.command()
+def shortlist(
+    min_score: float = typer.Option(None, "--min-score", help="Override the profile's threshold."),
+    company: str = typer.Option(None, "--company", "-c", help="Only this employer."),
+    source: str = typer.Option(None, "--source", "-s", help="Only rows seen from this source."),
+    since_days: int = typer.Option(
+        None, "--since-days", help="Only rows first seen this recently."
+    ),
+    snoozed: bool = typer.Option(False, "--snoozed", help="Include snoozed rows."),
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+) -> None:
+    """The ranked list of what is worth an evening (#32).
+
+    Rows the hard filters cut are not here -- they were already judged, and
+    `jobagent score --filtered` is where those live with their reason.
+    """
+    from jobagent.tracking.shortlist import Filters
+    from jobagent.tracking.shortlist import build as build_shortlist
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        profile = _profile_or_exit(store)
+        entries = build_shortlist(
+            repo.all(),
+            repo.latest_scores(),
+            repo.sighting_counts(),
+            profile,
+            Filters(
+                min_score=min_score,
+                company=company,
+                source=source,
+                since_days=since_days,
+                include_snoozed=snoozed,
+            ),
+            sources=repo.sources_by_job() if source else None,
+        )
+
+    threshold = min_score if min_score is not None else profile.shortlist.min_score
+    if as_json:
+        console.print_json(data={"min_score": threshold, "entries": [e.as_dict() for e in entries]})
+        return
+
+    if not entries:
+        console.print(f"[yellow]Nothing at or above {threshold:.2f}.[/yellow]")
+        console.print(
+            "Lower it with [bold]--min-score[/bold], or check "
+            "[bold]jobagent score --filtered[/bold] for what was cut."
+        )
+        return
+    _print_entries(entries, title=f"Shortlist — {len(entries)} at or above {threshold:.2f}")
+
+
+def _print_entries(entries: list[Any], title: str) -> None:
+    table = Table(title=title)
+    table.add_column("#", justify="right")
+    table.add_column("Score", justify="right")
+    table.add_column("Company")
+    table.add_column("Title")
+    table.add_column("Closes")
+    table.add_column("Basis", style="dim")
+    for position, entry in enumerate(entries, start=1):
+        flag = f" [magenta]×{entry.sightings}[/magenta]" if entry.is_repost else ""
+        table.add_row(
+            str(position),
+            f"{entry.total:.2f}",
+            entry.job.company,
+            entry.job.title[:44] + flag,
+            entry.job.deadline or "—",
+            f"{len(entry.scored_on)}/5 components",
+        )
+    console.print(table)
+
+
+@app.command()
+def digest(
+    since: int = typer.Option(1, "--since", help="Fallback window when no digest has run."),
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+) -> None:
+    """The reading queue: new, moved, reposted, and what the filters ate (#32).
+
+    Meant for ten minutes over coffee, so every section is capped. Running it
+    records that you looked, which is what makes the next run's "new" mean
+    "since you last read this" rather than "in the last day".
+    """
+    from jobagent.tracking.digest import build as build_digest
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        profile = _profile_or_exit(store)
+        result = build_digest(
+            repo.all(),
+            repo.latest_scores(),
+            repo.sighting_counts(),
+            repo.score_movement(),
+            repo.filtered_jobs(),
+            profile,
+            last_run=store.last_audit("digest"),
+            fallback_days=since,
+        )
+        store.append_audit("digest", {"new": len(result.new), "moved": len(result.moved)})
+
+    if as_json:
+        console.print_json(data=result.as_dict())
+        return
+    _render_digest(result)
+
+
+def _render_digest(result: Any) -> None:
+    console.print(
+        f"\n[bold]Digest[/bold] [dim]— new since {result.since} ({result.since_source})[/dim]"
+    )
+
+    if result.is_empty:
+        console.print("\n[green]Nothing new worth reading.[/green]")
+    if result.new:
+        _print_entries(result.new, title=f"New ({len(result.new)})")
+    if result.moved:
+        table = Table(title=f"Score moved ({len(result.moved)})")
+        table.add_column("Company")
+        table.add_column("Title")
+        table.add_column("Was", justify="right")
+        table.add_column("Now", justify="right")
+        table.add_column("What changed", style="dim")
+        for m in result.moved:
+            arrow = "[green]▲[/green]" if m.delta > 0 else "[red]▼[/red]"
+            why = ", ".join(m.changed) or "weights rescaled, no component changed"
+            if m.dropped_off:
+                why = f"[yellow]fell below your threshold[/yellow] — {why}"
+            table.add_row(
+                m.entry.job.company,
+                m.entry.job.title[:38],
+                f"{m.previous:.2f}",
+                f"{arrow} {m.latest:.2f}",
+                why,
+            )
+        console.print(table)
+    if result.reposts:
+        table = Table(title=f"Seen before ({len(result.reposts)})")
+        table.add_column("Company")
+        table.add_column("Title")
+        table.add_column("Times seen", justify="right")
+        for entry in result.reposts:
+            table.add_row(entry.job.company, entry.job.title[:44], str(entry.sightings))
+        console.print(table)
+        console.print(
+            "[dim]A role reposted repeatedly is either hard to fill or a phantom. "
+            "Worth knowing before an evening on a cover letter.[/dim]"
+        )
+    if result.total_filtered:
+        summary = ", ".join(f"{count} by {rule}" for rule, count in result.filtered.items())
+        console.print(f"\n[dim]Hard filters cut {result.total_filtered}: {summary}.[/dim]")
+        console.print("[dim]jobagent score --filtered to see which, and why.[/dim]")
+
+
+@app.command()
+def skip(
+    job_id: int = typer.Argument(..., help="The row to skip."),
+    reason: str = typer.Option(..., "--reason", "-r", help="Why. Stored, and read by `report`."),
+) -> None:
+    """Skip a role, recording why.
+
+    The reason is the point: three weeks from now a skip with no reason is
+    indistinguishable from one you would reverse today.
+    """
+    with Storage() as store:
+        repo = BoardRepo(store)
+        job = repo.get(job_id)
+        if job is None:
+            console.print(f"[yellow]No job {job_id}.[/yellow]")
+            raise typer.Exit(code=1)
+        repo.set_state(job_id, State.SKIPPED, reason=reason)
+    console.print(f"[dim]○[/dim] Skipped: {job.company} — {job.title}")
+    console.print(f"  [dim]{reason}[/dim]")
+
+
+@app.command()
+def snooze(
+    job_id: int = typer.Argument(..., help="The row to hide for a while."),
+    days: int = typer.Option(7, "--days", "-d", help="How long to hide it."),
+) -> None:
+    """Hide a role from the digest until a date, without deciding anything.
+
+    Deliberately not a state. "Not now" is not a decision, and making it one
+    means remembering to undo it.
+    """
+    from datetime import timedelta
+
+    if days < 1:
+        console.print("[yellow]--days must be at least 1.[/yellow]")
+        raise typer.Exit(code=1)
+    until = date.today() + timedelta(days=days)
+    with Storage() as store:
+        repo = BoardRepo(store)
+        job = repo.get(job_id)
+        if job is None:
+            console.print(f"[yellow]No job {job_id}.[/yellow]")
+            raise typer.Exit(code=1)
+        repo.snooze(job_id, until)
+    console.print(f"[dim]💤 {job.company} — {job.title}[/dim]")
+    console.print(f"  back on {until.isoformat()}")
+
+
+@app.command()
+def daily(
+    source: list[str] = typer.Option(
+        None, "--source", "-s", help="Fetch this source first. Repeatable. Omit to skip fetching."
+    ),
+    limit: int = typer.Option(20, "--limit", "-n", help="Max postings per source."),
+) -> None:
+    """The unattended run: fetch, extract, score, then print the digest (#32).
+
+    Safe for cron. Fetching happens only for sources named explicitly -- a
+    default that silently hits live bank tenants every morning is the wrong
+    default, and the adapters treat a 401/403 as a refusal rather than a puzzle.
+    """
+    from jobagent.matching.extract import RULESET_VERSION
+    from jobagent.matching.extract import extract as run_extract
+
+    # One bad source must not cost the run its digest. Failures are collected
+    # and reported at the end as a non-zero exit, so cron still gets the reading
+    # queue AND something to alert on -- aborting here would throw away the
+    # extract and score passes over everything already on the board.
+    failures: list[str] = []
+    for name in source or []:
+        console.print(f"[dim]fetching {name}…[/dim]")
+        try:
+            fetch(name, limit=limit, match="", details=True)
+        except typer.Exit as exc:
+            if exc.exit_code:
+                failures.append(f"{name} (unknown adapter, or nothing fetched)")
+        except Exception as exc:
+            failures.append(f"{name}: {exc}")
+            console.print(f"[yellow]{name} failed:[/yellow] {exc}")
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        profile = _profile_or_exit(store)
+
+        extracted = 0
+        for job_id, text in repo.jobs_with_descriptions():
+            try:
+                repo.save_requirements(job_id, run_extract(text))
+                extracted += 1
+            except Exception as exc:
+                console.print(f"[yellow]job {job_id} could not be extracted:[/yellow] {exc}")
+        store.append_audit("extract", {"jobs": extracted, "ruleset": RULESET_VERSION})
+        scored = _score_everything(repo, profile, store)
+
+    console.print(f"[dim]extracted {extracted}, scored {scored}[/dim]")
+    digest(since=1, as_json=False)
+
+    if failures:
+        console.print(f"\n[yellow]{len(failures)} source(s) failed:[/yellow] {'; '.join(failures)}")
+        raise typer.Exit(code=1)
+
+
 @app.command()
 def report() -> None:
     """Funnel: what is converting, and what is not."""
@@ -725,6 +991,21 @@ def report() -> None:
     if data.median_days_in_state is not None:
         outcomes.add_row("Median days in state", str(data.median_days_in_state))
     console.print(outcomes)
+
+    if data.skip_reasons or data.skipped_without_reason:
+        reasons = Table(title="Why roles were skipped")
+        reasons.add_column("Reason")
+        reasons.add_column("Count", justify="right")
+        for reason, count in data.skip_reasons[:10]:
+            reasons.add_row(reason, str(count))
+        if data.skipped_without_reason:
+            reasons.add_row("[dim]no reason recorded[/dim]", str(data.skipped_without_reason))
+        console.print(reasons)
+        if data.skipped_without_reason and not data.skip_reasons:
+            console.print(
+                '[dim]Nothing here says why. `jobagent skip <id> -r "..."` records a reason; '
+                "the board's `s` key does not ask for one.[/dim]"
+            )
 
     if data.by_company:
         companies = Table(title="By company — ranked by applications, not rows")

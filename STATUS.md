@@ -2,9 +2,9 @@
 
 Snapshot of **now**, not a changelog. Update it in the same commit as the change that made it stale. Keep it under ~60 lines; git history holds the rest.
 
-Last updated: 2026-09-15
+Last updated: 2026-09-16
 
-Current focus: the matching pipeline is closed — fetch, extract, filter, score. Next is the daily shortlist and digest (#32), then sending the RBC and BMO applications before they close on the 20th.
+Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, digest. Everything left before the 20th is mine: the company paragraph and the "why this company" answer for RBC and BMO.
 
 ## What works
 
@@ -16,7 +16,7 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 313 tests pass; 1 ranking test is skipped because the corpus has no borderline label. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 369 tests pass; 1 ranking test is skipped because the corpus has no borderline label. `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
@@ -25,6 +25,8 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 - `jobagent report` — funnel with denominators stated, small samples flagged, and a plain "nothing submitted yet" when that is the truth.
 - `jobagent export` / `purge` — one archive out, and a delete that verifies nothing recoverable remains.
 - `jobagent score` — hard filters then a decomposed score, both stored per job. Filters cut for a stated reason (`--filtered` lists them); absence never cuts, so a posting silent on pay, sponsorship or level is judged, not dropped. `--explain <id>` prints the five components with the weight each carried and a line on what it looked at. A component with nothing to judge on is dropped and the remaining weights rescale, so a row with no description still ranks.
+- `jobagent shortlist` / `digest` / `daily` — the reading queue (#32). The digest is four capped sections: new since you last looked, roles whose score moved and which component moved it, reposts with their sighting count, and what the filters cut aggregated by rule. `daily` chains fetch → extract → score → digest unattended and is safe for cron; it fetches only sources named explicitly. Both take `--json`.
+- `jobagent skip <id> -r "..."` / `snooze <id> --days N` — a skip records why, and `report` aggregates the reasons. A snooze hides a row until a date and it returns on its own; it is not a state, so nothing has to be undone.
 - Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
 
 ## In progress
@@ -35,7 +37,7 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 
 1. Send the RBC and BMO applications. Packages are built; the company paragraph and the "why this company" answer still need me.
 2. Rephrasing toward a posting's vocabulary, through the same truthfulness gate.
-3. Daily shortlist and digest (#32) — thresholds, score movement, reposts, and what the filters removed in aggregate. `score` prints a plain ranked table; the digest is the reading queue on top of it.
+3. Extend the extraction eval corpus toward the 50 postings #30 asks for (#65). Twelve is enough to catch a gross regression and not enough to trust a precision number.
 
 ## Known limitations
 
@@ -47,7 +49,7 @@ Current focus: the matching pipeline is closed — fetch, extract, filter, score
 - Location filtering resolves missing or placeholder locations from explicit `Work Location: city, region, country` lines in descriptions. Ambiguous formats remain unknown; the Wilmington fixture is now cut for location.
 - Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
-- No `--json` output and no global flags (`--config`, `--data-dir`, `--verbose`). Every command prints a Rich table, so nothing composes — no piping into `jq`. The data directory is settable only through `JOBAGENT_DATA_DIR`. Four phases landed without the surface #26 meant to fix early, so retrofitting it now spans nineteen commands.
+- `--json` exists on `shortlist` and `digest` only; every other command prints a Rich table and composes with nothing. There are still no global flags (`--config`, `--data-dir`, `--verbose`), and the data directory is settable only through `JOBAGENT_DATA_DIR`. #26 is the rest of that surface.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.
 

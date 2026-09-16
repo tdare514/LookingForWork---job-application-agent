@@ -39,12 +39,28 @@ from jobagent.core.vocabulary import Seniority
 # Bumped when the stored shape changes. A stored profile carrying an older
 # version is upgraded through _UPGRADES on read; a newer one is refused, because
 # guessing at a shape from the future is how a filter silently empties.
-CURRENT_SCHEMA_VERSION = 1
+CURRENT_SCHEMA_VERSION = 2
 
-# Upgraders keyed by the version they read. Empty at v1 -- the hook exists so
-# that the first shape change is a small diff in a place already tested, rather
-# than a decision made in a hurry mid-search.
-_UPGRADES: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {}
+
+def _v1_to_v2(data: dict[str, Any]) -> dict[str, Any]:
+    """Add the `shortlist` block (#32).
+
+    The first real entry in this chain, and it is deliberately additive: a v1
+    profile written before the digest existed gets the defaults and keeps
+    working. Nothing is renamed and nothing is dropped, because a profile is
+    hand-written and an upgrade that silently discards a line somebody typed is
+    worse than one that refuses.
+    """
+    upgraded = dict(data)
+    upgraded.setdefault("shortlist", {})
+    upgraded["schema_version"] = 2
+    return upgraded
+
+
+# Upgraders keyed by the version they read. The hook exists so that a shape
+# change is a small diff in a place already tested, rather than a decision made
+# in a hurry mid-search.
+_UPGRADES: dict[int, Callable[[dict[str, Any]], dict[str, Any]]] = {1: _v1_to_v2}
 
 WORK_ARRANGEMENTS = ("onsite", "hybrid", "remote")
 
@@ -178,6 +194,37 @@ class Weights(BaseModel):
         }
 
 
+class Shortlist(BaseModel):
+    """How much of the board is worth reading (#32).
+
+    Declared intent, like the weights above: the digest exists to leave three to
+    six roles worth pursuing, and both numbers are judgements about your own
+    time rather than facts about the jobs.
+
+    `min_score` is compared against a total that may have been measured on
+    fewer components than another row's -- `jobagent score` prints that count,
+    and a threshold cannot see it. That is a real limit of a single number and
+    the reason `max_entries` exists as a second, blunter guard.
+    """
+
+    min_score: float = 0.35
+    max_entries: int = 6
+
+    @field_validator("min_score")
+    @classmethod
+    def _within_range(cls, v: float) -> float:
+        if not 0.0 <= v <= 1.0:
+            raise ValueError(f"shortlist.min_score is a score in [0, 1], got {v}")
+        return v
+
+    @field_validator("max_entries")
+    @classmethod
+    def _at_least_one(cls, v: int) -> int:
+        if v < 1:
+            raise ValueError(f"shortlist.max_entries must be at least 1, got {v}")
+        return v
+
+
 class Profile(BaseModel):
     """Declared intent. Every hard filter and score component reads this."""
 
@@ -199,6 +246,7 @@ class Profile(BaseModel):
     compensation: Compensation = Field(default_factory=Compensation)
     narrative: str = ""
     weights: Weights = Field(default_factory=Weights)
+    shortlist: Shortlist = Field(default_factory=Shortlist)
 
     @field_validator("work_arrangements")
     @classmethod

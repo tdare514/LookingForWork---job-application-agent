@@ -7,6 +7,8 @@ that quietly shrinks is the failure mode this whole feature is written around.
 
 from __future__ import annotations
 
+import json
+
 from jobagent.core import pii
 from jobagent.core.storage import Storage
 from jobagent.matching.filters import Verdict
@@ -105,3 +107,116 @@ def test_the_score_columns_are_in_the_pii_registry(store: Storage) -> None:
     assert ("scores", "filter_reason") in registered
     for table, column in (("scores", "components"), ("scores", "filter_reason")):
         assert column in store.columns(table)
+
+
+# -- skip reasons and snooze (#32) ----------------------------------------
+
+
+def test_a_skip_reason_round_trips(store: Storage) -> None:
+    """Three weeks on, a skip with no reason is indistinguishable from one to reverse."""
+    from jobagent.tracking.board import State
+
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="TD", title="Contact Centre Rep")
+    repo.set_state(job.id, State.SKIPPED, reason="not an analytical role")
+
+    refreshed = repo.get(job.id)
+    assert refreshed is not None
+    assert refreshed.state == State.SKIPPED
+    assert refreshed.state_reason == "not an analytical role"
+
+
+def test_a_state_change_without_a_reason_does_not_erase_one(store: Storage) -> None:
+    """The board's `s` key passes no reason and must not wipe one typed at the CLI."""
+    from jobagent.tracking.board import State
+
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="TD", title="Contact Centre Rep")
+    repo.set_state(job.id, State.SKIPPED, reason="not analytical")
+    repo.set_state(job.id, State.READY)
+
+    refreshed = repo.get(job.id)
+    assert refreshed is not None
+    assert refreshed.state_reason == "not analytical"
+
+
+def test_the_audit_entry_does_not_carry_the_reason_text(store: Storage) -> None:
+    """The reason names a company and a judgement about it.
+
+    `audit_log.detail` is CRITICAL, but it is also the field most likely to be
+    pasted into a terminal while debugging. It records *that* a reason was
+    given, not what it said.
+    """
+    from jobagent.tracking.board import State
+
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="TD", title="Contact Centre Rep")
+    repo.set_state(job.id, State.SKIPPED, reason="the hiring manager was rude")
+
+    entry = store.last_audit("job.state")
+    assert entry is not None
+    assert entry["detail"]["reason_given"] is True
+    assert "rude" not in json.dumps(entry["detail"])
+
+
+def test_snooze_hides_a_row_until_the_date_passes(store: Storage) -> None:
+    from datetime import date
+
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="RBC", title="Risk Analyst Intern")
+    repo.snooze(job.id, date(2026, 9, 20))
+
+    refreshed = repo.get(job.id)
+    assert refreshed is not None
+    assert refreshed.snoozed_until == "2026-09-20"
+    assert refreshed.is_snoozed(date(2026, 9, 16))
+    assert not refreshed.is_snoozed(date(2026, 9, 21))
+    assert refreshed.state == "new", "snooze is not a state and changes none"
+
+
+def test_unsnooze_clears_it(store: Storage) -> None:
+    from datetime import date
+
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="RBC", title="Risk Analyst Intern")
+    repo.snooze(job.id, date(2026, 12, 1))
+    repo.unsnooze(job.id)
+
+    refreshed = repo.get(job.id)
+    assert refreshed is not None
+    assert refreshed.snoozed_until is None
+
+
+def test_score_movement_needs_two_readings(store: Storage) -> None:
+    """A first score is not a rise from zero -- that would report the install date."""
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="RBC", title="Risk Analyst Intern")
+
+    repo.save_score(job.id, a_score(0.40), Verdict(passed=True))
+    assert repo.score_movement() == {}
+
+    repo.save_score(job.id, a_score(0.75), Verdict(passed=True))
+    movement = repo.score_movement()
+    previous, latest = movement[job.id]
+    assert previous["total"] == 0.40
+    assert latest["total"] == 0.75
+    assert "components" in latest, "the decomposition comes too, or 'why' is unanswerable"
+
+
+def test_score_movement_ignores_filtered_readings(store: Storage) -> None:
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="BMO", title="Director, Strategy")
+    repo.save_score(job.id, a_score(0.4), Verdict(passed=False, rule="seniority", reason="x"))
+    repo.save_score(job.id, a_score(0.9), Verdict(passed=False, rule="seniority", reason="x"))
+    assert repo.score_movement() == {}
+
+
+def test_last_audit_finds_the_newest_entry_for_one_action(store: Storage) -> None:
+    store.append_audit("digest", {"new": 1})
+    store.append_audit("score", {"jobs": 5})
+    store.append_audit("digest", {"new": 9})
+
+    entry = store.last_audit("digest")
+    assert entry is not None
+    assert entry["detail"]["new"] == 9
+    assert store.last_audit("never-ran") is None

@@ -156,11 +156,54 @@ not.
 
 ### 7. Rank and digest
 
-Daily digest: new matches above threshold, roles whose score moved, reposts of
-previously-seen roles, and what the hard filters removed in aggregate. Each entry
-carries its score decomposition and a link.
+`jobagent shortlist` is the ranked list; `jobagent digest` is the reading queue
+on top of it. Both take `--json`. `jobagent daily` runs the whole pipeline
+unattended — fetch, extract, score, digest — and is safe for cron.
 
-The digest is a reading queue. Selecting from it is the handoff into Phase 3.
+Four sections, because four questions are worth asking each morning:
+
+| Section | Answers |
+|---|---|
+| New | What appeared since I last looked, above the threshold |
+| Moved | What changed its mind, and **which component** changed it |
+| Reposts | What I have seen before, with the sighting count |
+| Filtered | What the hard filters removed, aggregated **by rule** |
+
+Each entry carries its score decomposition and a link.
+
+Every section is capped. #32 states the failure mode it is designed against —
+*a digest that gets skipped is the whole phase wasted* — so `shortlist.max_entries`
+from the profile bounds the section that matters and constants bound the rest.
+Four uncapped sections is a report, not a digest.
+
+**"Since when" is derived, not stored.** The audit log already records that a
+digest ran, and that is the same fact a run-marker table would hold. When there
+is no previous run — a fresh install, or after `purge` clears the log — it falls
+back to a window and *says which it used*: "new since yesterday" and "new since
+you last looked" are different claims, and the digest should not make the
+stronger one by accident.
+
+Three rules about what does **not** appear, each of which was a bug first:
+
+- **A repost is never counted as new.** A role seen repeatedly is either a hard
+  requisition to fill or a phantom posting (#28) — worth knowing before an
+  evening on a cover letter, not after.
+- **A row you decided on does not come back.** Skipped, rejected, or already
+  applied to. Skipping has to actually stop it returning or the queue stops
+  being one. `jobagent snooze` is the softer form: it hides a row until a date
+  and it returns on its own, deliberately not a state, because "not now" is not
+  a decision and should not have to be undone by hand.
+- **A role that fell below the threshold is still reported**, flagged as having
+  dropped off. Building the moved section only from rows currently on the list
+  meant the most actionable movement there is — this is no longer worth your
+  evening — vanished silently.
+
+Skips carry a reason (`jobagent skip <id> -r "..."`), stored on the row and
+aggregated by `jobagent report`. Skips with no reason are counted separately
+rather than dropped: the board's `s` key does not ask for one, so "I did not
+say" is the common case and worth seeing next to the ones that did.
+
+Selecting from the digest is the handoff into Phase 3.
 
 ## Calibration
 
