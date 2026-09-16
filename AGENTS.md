@@ -90,6 +90,7 @@ Load what the task needs, in this order. Do not read all of `docs/` by default.
 
 ## Working rules
 
+- **Standing authorization (2026-09-16):** Agents may review and merge routine PRs in this repository on my behalf once the required checks pass and they have reviewed the final diff. Use your judgment on ranking labels, grounded in the posting text and the declared search profile. No additional merge confirmation is needed within this scope. Follow the branch and PR workflow in `CONTRIBUTING.md`; the three non-negotiable rules and hard constraints still apply.
 - **One issue, one branch, one PR.** Never batch several issues into one branch, even when they are sequential and the work is going well — a PR covering five issues cannot be reviewed, reverted, or pointed at from an issue. When later work depends on earlier work, stack the PRs (each based on the previous) rather than merging them into one.
 - One concern per branch. Small diffs.
 - Ruff and mypy are the authority on style. Do not argue formatting.
