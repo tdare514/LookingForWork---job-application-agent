@@ -18,6 +18,7 @@ from pydantic import ValidationError
 from jobagent.core.profile import (
     CURRENT_SCHEMA_VERSION,
     Profile,
+    Shortlist,
     Weights,
     load,
     load_file,
@@ -290,3 +291,57 @@ def test_a_file_edit_does_not_change_what_the_agent_reads(tmp_path: Path, store:
     stored = load(store)
     assert stored is not None
     assert stored.target_titles == ["Data Analyst"]
+
+
+# -- the upgrade chain ----------------------------------------------------
+
+
+def test_a_stored_v1_profile_upgrades_to_v2_and_loads(store: Storage) -> None:
+    """The first real exercise of `_UPGRADES`.
+
+    The hook has existed since the module was written and has never run on data
+    shaped like an older version. A profile stored before the digest existed has
+    no `shortlist` block at all, and it has to keep loading -- the alternative
+    is that a schema bump silently bricks a file somebody hand-wrote.
+    """
+    v1 = {
+        "schema_version": 1,
+        "target_titles": ["Risk Analyst"],
+        "target_seniority": ["intern"],
+        "locations": ["Toronto"],
+        "work_arrangements": ["hybrid"],
+        "must_have_skills": ["python"],
+        "work_authorization": {"authorized_in": ["CA"], "needs_sponsorship": False},
+    }
+    store.put_singleton("profile", v1, 1)
+
+    loaded = load(store)
+    assert loaded is not None
+    assert loaded.schema_version == 2
+    assert loaded.shortlist.min_score == 0.35, "the v1 profile gets the defaults"
+    assert loaded.target_titles == ["Risk Analyst"], "and keeps everything it had"
+
+
+def test_the_upgrade_does_not_discard_a_value_the_user_typed() -> None:
+    """Additive only. A profile is hand-written; silently dropping a line is worse
+    than refusing to load."""
+    from jobagent.core.profile import _upgrade
+
+    upgraded = _upgrade({"schema_version": 1, "narrative": "mine", "weights": {"freshness": 0.9}})
+    assert upgraded["narrative"] == "mine"
+    assert upgraded["weights"] == {"freshness": 0.9}
+    assert upgraded["schema_version"] == 2
+
+
+def test_a_v2_profile_keeps_its_own_shortlist_block() -> None:
+    from jobagent.core.profile import _upgrade
+
+    same = {"schema_version": 2, "shortlist": {"min_score": 0.8, "max_entries": 2}}
+    assert _upgrade(same)["shortlist"] == {"min_score": 0.8, "max_entries": 2}
+
+
+def test_a_nonsense_threshold_is_refused() -> None:
+    with pytest.raises(ValidationError):
+        Shortlist(min_score=1.5)
+    with pytest.raises(ValidationError):
+        Shortlist(max_entries=0)

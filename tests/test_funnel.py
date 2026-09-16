@@ -198,3 +198,37 @@ def test_untriaged_rows_are_reported_so_the_funnel_top_reconciles(
     assert report.total == 3
     assert report.untriaged == 2
     assert report.stages[0].reached == 1
+
+
+def test_skip_reasons_reach_the_report(store: Storage) -> None:
+    """#32's acceptance criterion that reaches into Phase 4.
+
+    Aggregated, not listed: the question is "am I ruling out the same thing over
+    and over", and a count answers that where thirty rows do not.
+    """
+    repo = BoardRepo(store)
+    for company in ("TD", "CIBC"):
+        job, _ = repo.add(company=company, title="Contact Centre Rep")
+        repo.set_state(job.id, State.SKIPPED, reason="not an analytical role")
+    lone, _ = repo.add(company="BMO", title="Branch Manager")
+    repo.set_state(lone.id, State.SKIPPED, reason="too senior")
+
+    report = build(repo.all())
+    assert report.skip_reasons == [("not an analytical role", 2), ("too senior", 1)]
+    assert report.skipped_without_reason == 0
+
+
+def test_a_skip_with_no_reason_is_counted_separately_not_dropped(store: Storage) -> None:
+    """A skip with no reason is worth seeing next to the ones that have one.
+
+    The board's `s` key records no reason, so this is the common case, and
+    silently omitting it would make the report look more considered than it is.
+    """
+    repo = BoardRepo(store)
+    job, _ = repo.add(company="TD", title="Contact Centre Rep")
+    repo.set_state(job.id, State.SKIPPED)
+
+    report = build(repo.all())
+    assert report.skip_reasons == []
+    assert report.skipped_without_reason == 1
+    assert report.skipped == 1

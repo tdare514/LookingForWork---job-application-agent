@@ -86,6 +86,13 @@ class Report:
     untriaged: int = 0
     by_company: list[tuple[str, int, int]] = field(default_factory=list)
     median_days_in_state: int | None = None
+    # Why rows were skipped, most common first (#32). Aggregated rather than
+    # listed: the question this answers is "am I ruling out the same thing over
+    # and over", and thirty rows do not answer it as well as one count does.
+    # Skips with no reason are counted separately rather than dropped, because
+    # "I did not say" is itself worth seeing next to the ones that did.
+    skip_reasons: list[tuple[str, int]] = field(default_factory=list)
+    skipped_without_reason: int = 0
 
     @property
     def has_outcomes(self) -> bool:
@@ -170,6 +177,17 @@ def build(jobs: list[Job], *, today: date | None = None) -> Report:
     ages = sorted(d for d in (_days_in_state(j, today) for j in jobs) if d is not None)
     median = ages[len(ages) // 2] if ages else None
 
+    reasons: dict[str, int] = {}
+    unexplained = 0
+    for job in jobs:
+        if job.state != State.SKIPPED:
+            continue
+        reason = (job.state_reason or "").strip()
+        if reason:
+            reasons[reason] = reasons.get(reason, 0) + 1
+        else:
+            unexplained += 1
+
     return Report(
         total=len(jobs),
         stages=stages,
@@ -183,5 +201,7 @@ def build(jobs: list[Job], *, today: date | None = None) -> Report:
             1 for j in jobs if (d := _days_in_state(j, today)) is not None and d >= STALE_AFTER_DAYS
         ),
         by_company=by_company,
+        skip_reasons=sorted(reasons.items(), key=lambda kv: (-kv[1], kv[0].lower())),
+        skipped_without_reason=unexplained,
         median_days_in_state=median,
     )

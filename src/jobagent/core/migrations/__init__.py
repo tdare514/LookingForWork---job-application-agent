@@ -182,4 +182,24 @@ M0003 = Migration(
 )
 
 
-MIGRATIONS: tuple[Migration, ...] = (M0001, M0002, M0003)
+M0004 = Migration(
+    4,
+    "skip_reasons_and_snooze",
+    """
+    -- Why a role was passed over (#32). There was nowhere to put this: the board
+    -- writes `jobs.state` directly, and `application_transitions.reason` belongs
+    -- to `applications`, which board rows do not use. A skip with no reason is
+    -- indistinguishable three weeks later from a skip you would now reverse,
+    -- and #32 requires the reason reach the funnel report.
+    ALTER TABLE jobs ADD COLUMN state_reason TEXT;
+
+    -- ISO date. A snoozed row leaves the digest and the shortlist until this
+    -- passes, then comes back on its own -- deliberately not a state, because
+    -- "not now" is not a decision and should not have to be undone by hand.
+    ALTER TABLE jobs ADD COLUMN snoozed_until TEXT;
+    CREATE INDEX idx_jobs_snoozed ON jobs(snoozed_until);
+    """,
+)
+
+
+MIGRATIONS: tuple[Migration, ...] = (M0001, M0002, M0003, M0004)

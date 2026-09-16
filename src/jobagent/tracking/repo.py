@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 import json
 from dataclasses import dataclass
+from datetime import date
 from typing import Any
 
 from jobagent.core.storage import Storage, utcnow
@@ -35,6 +36,20 @@ class Job:
     seniority: str | None
     first_seen_at: str
     state_changed_at: str | None
+    # Both added by M0004 (#32). Optional with defaults so a row read before the
+    # migration, or a Job built by hand in a test, still constructs.
+    state_reason: str | None = None
+    snoozed_until: str | None = None
+
+    def is_snoozed(self, today: date) -> bool:
+        """Snoozed rows leave the digest until the date passes, then return.
+
+        Deliberately not a state: "not now" is not a decision, and making it one
+        would mean remembering to undo it. The row keeps whatever state it had.
+        """
+        if not self.snoozed_until:
+            return False
+        return self.snoozed_until > today.isoformat()
 
 
 @dataclass(frozen=True)
@@ -64,7 +79,7 @@ def _fingerprint(company: str, title: str, location: str | None) -> str:
 
 _JOB_COLUMNS = (
     "id, company, title, url, location, deadline, state, notes, seniority,"
-    " first_seen_at, state_changed_at"
+    " first_seen_at, state_changed_at, state_reason, snoozed_until"
 )
 
 
@@ -234,6 +249,14 @@ class BoardRepo:
             (job_id,),
         )
         return [Sighting(**dict(r)) for r in rows]
+
+    def sources_by_job(self) -> dict[int, set[str]]:
+        """Which sources have shown each role. One job can come from several."""
+        rows = self.store.connect().execute("SELECT job_id, source FROM job_sightings")
+        out: dict[int, set[str]] = {}
+        for row in rows:
+            out.setdefault(int(row["job_id"]), set()).add(str(row["source"]))
+        return out
 
     def sighting_counts(self) -> dict[int, int]:
         """How many times each job has been seen. Reposts are signal."""
@@ -480,13 +503,70 @@ class BoardRepo:
         jobs.sort(key=lambda j: (rank_for(j.state), j.deadline or "9999", j.company.lower()))
         return jobs
 
-    def set_state(self, job_id: int, state: State) -> None:
+    def set_state(self, job_id: int, state: State, reason: str | None = None) -> None:
+        """Move a row, optionally recording why.
+
+        The reason is the point of #32's skip handling: three weeks later, a
+        skip with no reason is indistinguishable from one you would now reverse.
+        It is stored on the row and aggregated by the funnel report.
+
+        A `None` reason leaves any existing one alone rather than clearing it.
+        The board's `s` key passes no reason, and it should not silently erase
+        one typed at the CLI.
+        """
         with self.store.transaction() as conn:
             conn.execute(
                 "UPDATE jobs SET state = ?, state_changed_at = ? WHERE id = ?",
                 (str(state), utcnow(), job_id),
             )
-        self.store.append_audit("job.state", {"job_id": job_id, "state": str(state)})
+            if reason is not None:
+                conn.execute("UPDATE jobs SET state_reason = ? WHERE id = ?", (reason, job_id))
+        # The reason names a company and a judgement about it, so it stays out
+        # of the audit detail -- `audit_log.detail` is CRITICAL but it is also
+        # the thing most likely to be pasted somewhere while debugging.
+        self.store.append_audit(
+            "job.state",
+            {"job_id": job_id, "state": str(state), "reason_given": reason is not None},
+        )
+
+    def snooze(self, job_id: int, until: date) -> None:
+        """Hide a row from the digest until a date, without deciding anything."""
+        with self.store.transaction() as conn:
+            conn.execute(
+                "UPDATE jobs SET snoozed_until = ? WHERE id = ?", (until.isoformat(), job_id)
+            )
+        self.store.append_audit("job.snooze", {"job_id": job_id, "until": until.isoformat()})
+
+    def unsnooze(self, job_id: int) -> None:
+        with self.store.transaction() as conn:
+            conn.execute("UPDATE jobs SET snoozed_until = NULL WHERE id = ?", (job_id,))
+
+    def score_movement(self) -> dict[int, tuple[dict[str, Any], dict[str, Any]]]:
+        """`{job_id: (previous, latest)}` for rows scored more than once.
+
+        Free, because #31 appends scores rather than replacing them. Each half
+        is the full stored record -- total *and* decomposition -- because "the
+        score moved" is not useful on its own and the component that moved is
+        the whole point of the section it feeds.
+
+        Rows scored once are absent: there is no movement to report on a first
+        reading, and rendering 0.0 -> 0.62 as a rise would report the day the
+        tool was installed rather than anything about the job.
+        """
+        rows = self.store.connect().execute(
+            "SELECT job_id, total, components FROM scores WHERE filtered = 0"
+            " ORDER BY job_id, id DESC"
+        )
+        seen: dict[int, list[dict[str, Any]]] = {}
+        for row in rows:
+            seen.setdefault(int(row["job_id"]), []).append(
+                {"total": float(row["total"]), "components": json.loads(row["components"])}
+            )
+        return {
+            job_id: (records[1], records[0])
+            for job_id, records in seen.items()
+            if len(records) >= 2
+        }
 
     def set_notes(self, job_id: int, notes: str) -> None:
         with self.store.transaction() as conn:
