@@ -151,6 +151,24 @@ REGISTRY: tuple[PIIField, ...] = (
         RETENTION_RAW,
     ),
     PIIField(
+        "jobs",
+        "state_reason",
+        "Why a role was passed over. Free text naming an employer and a "
+        "judgement about them -- the same class of disclosure as `notes`.",
+        Sensitivity.CRITICAL,
+        (Destination.NOWHERE,),
+        RETENTION_UNTIL_DELETED,
+    ),
+    PIIField(
+        "jobs",
+        "snoozed_until",
+        "When a role comes back into the digest. A date against a named "
+        "employer is part of the record of who was being considered, and when.",
+        Sensitivity.HIGH,
+        (Destination.NOWHERE,),
+        RETENTION_UNTIL_DELETED,
+    ),
+    PIIField(
         "scores",
         "components",
         "The score decomposition: declared intent applied to a named company. "

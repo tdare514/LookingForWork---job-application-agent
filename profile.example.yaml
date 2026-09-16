@@ -115,3 +115,16 @@ weights:
   # silently ignored: a weight that does nothing produces a score that looks
   # complete and is not.
   semantic_fit: 0.0
+
+# --- Shortlist ---------------------------------------------------------------
+
+# How much of the board is worth reading. The digest exists to leave three to
+# six roles worth an evening, so both of these are judgements about your own
+# time rather than facts about the jobs.
+shortlist:
+  # Below this total, a role does not make the digest. Note that a score can be
+  # measured on fewer components than another (`jobagent score` prints the
+  # count), and a threshold cannot see that -- which is why max_entries exists
+  # as a second, blunter guard.
+  min_score: 0.35
+  max_entries: 6

@@ -59,6 +59,22 @@ SORT_RANK: dict[State, int] = {
 }
 
 
+# States where the decision has not been made yet. The shortlist and the digest
+# are a reading queue, so a row you skipped, were rejected from, or have already
+# applied to does not belong in them -- skipping a role must actually stop it
+# coming back, or the queue stops being one.
+UNDECIDED: frozenset[State] = frozenset({State.NEW, State.READY})
+
+
+def still_deciding(state: str) -> bool:
+    try:
+        return State(state) in UNDECIDED
+    except ValueError:
+        # An unrecognised state is not a decision we can read, so leave the row
+        # visible rather than hiding it on a guess.
+        return True
+
+
 def light_for(state: str) -> Light:
     try:
         return LIGHTS[State(state)]

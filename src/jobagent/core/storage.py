@@ -169,6 +169,35 @@ class Storage:
             for r in rows
         ]
 
+    def last_audit(self, action: str) -> dict[str, Any] | None:
+        """The most recent entry for one action, or None if it never ran.
+
+        A read, so the append-only rule above is untouched. This is what lets
+        the digest answer "since you last looked" without a table of its own:
+        the audit log already records that `score` and `digest` ran, and that is
+        the same fact a run-marker would have stored.
+
+        None is a normal answer -- a fresh install, or after `purge` clears the
+        log -- and the caller falls back to a window rather than implying a
+        comparison it could not make.
+        """
+        row = (
+            self.connect()
+            .execute(
+                "SELECT action, detail, occurred_at FROM audit_log WHERE action = ?"
+                " ORDER BY id DESC LIMIT 1",
+                (action,),
+            )
+            .fetchone()
+        )
+        if row is None:
+            return None
+        return {
+            "action": row["action"],
+            "detail": json.loads(row["detail"]),
+            "occurred_at": row["occurred_at"],
+        }
+
     def count(self, table: str) -> int:
         if table not in self.tables():
             raise ValueError(f"unknown table: {table}")
