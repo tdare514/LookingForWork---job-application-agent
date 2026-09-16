@@ -1,0 +1,70 @@
+# A triaged shortlist, ready to import onto the board.
+#
+#   jobagent import ~/shortlist.yaml --dry-run   # see what it would do
+#   jobagent import ~/shortlist.yaml             # do it
+#
+# The searching happens outside this tool. What matters here is that the
+# *judgement* comes across with the row: the fit score, the verdict, why it fits
+# and what is missing. A bare company and title is indistinguishable from
+# something scraped off a careers page, and gives you nothing to choose by at
+# 9pm with four tabs open.
+#
+# Two things this deliberately does not do:
+#
+#   - The fit score never feeds `jobagent score`. That one is rule-based and
+#     explains itself component by component; folding an outside number into it
+#     would make the decomposition a lie. Compare them yourself.
+#   - An import never walks a row backwards. Once something is applied, waiting
+#     or interviewing, a search result knows nothing that should override it.
+
+# What produced these judgements, and when. Both end up in every row's notes,
+# so that a fit score read three weeks from now is visibly three weeks old.
+source: chatgpt-daily-search
+retrieved: 2026-09-15
+
+leads:
+  # verdict is one of: apply | maybe | skip
+  #   apply → the board's "needs you" (yellow)
+  #   maybe → "new", left for triage. Not everything promising is urgent, and a
+  #           board where every row is yellow has no signal left in it.
+  #   skip  → skipped, with the reason kept. Knowing why you passed matters when
+  #           the same posting reappears next month.
+  - company: RBC Borealis
+    title: AI Business Analyst (Winter 2027, 8 months)
+    location: Toronto, ON
+    deadline: 2026-09-20
+    url: https://jobs.rbc.com/ca/en/job/EXAMPLE
+    verdict: apply
+    fit: 9.8
+    why: >
+      AI Business Enablement inside Technology & Operations. Requirements
+      gathering, process design, stakeholder decks, Jira/Confluence, SDLC — and
+      three AI MVPs on my side answers "why AI enablement" without stretching.
+    gaps: >
+      Posting asks for Business/Finance students; CS is not named. Applying
+      anyway — the role sits in Technology and wants SDLC and Agile.
+
+  - company: TD
+    title: Data Analyst Co-op/Intern (Winter 2027, 4 months)
+    location: Toronto, ON
+    deadline: 2026-10-08
+    verdict: apply
+    fit: 9.2
+    why: >
+      Titled Data Analyst, written like a BSA role: business/system/data
+      requirements, Agile ceremonies, user stories, working with product owners
+      and QA.
+    gaps: SQL depth, Tableau, formal data modelling. Brush up SQL before an interview.
+
+  - company: RBC
+    title: CLAO Business Analyst (Winter 2027)
+    location: Toronto, ON
+    verdict: skip
+    fit: 8.5
+    why: >
+      Duties are a strong match — requirements elicitation, process mapping,
+      documentation, project planning.
+    gaps: >
+      Requires returning to school after the placement, or the term being a
+      graduation requirement. Neither holds, so the application would be
+      discarded on eligibility. Skipping is not a judgement on the role.

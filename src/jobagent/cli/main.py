@@ -670,6 +670,74 @@ def _explain_score(repo: BoardRepo, latest: dict[int, Any], job_id: int) -> None
         )
 
 
+@app.command("import")
+def import_shortlist(
+    path: Path = typer.Argument(..., help="A shortlist YAML. See shortlist.example.yaml."),
+    dry_run: bool = typer.Option(
+        False, "--dry-run", help="Show what would change and write nothing."
+    ),
+) -> None:
+    """Put a triaged shortlist on the board, judgements and all.
+
+    The fit score and reasoning land in each row's notes, attributed to their
+    source and dated -- they are somebody else's opinion, not this tool's, and
+    they never feed `jobagent score`.
+    """
+    from jobagent.tracking.leads import apply_to_board
+    from jobagent.tracking.leads import load_file as load_shortlist
+
+    try:
+        shortlist = load_shortlist(path)
+    except FileNotFoundError:
+        console.print(f"[red]No shortlist at[/red] {path}")
+        console.print(
+            "Start from the example: [bold]cp shortlist.example.yaml[/bold] ~/shortlist.yaml"
+        )
+        raise typer.Exit(code=1) from None
+    except Exception as exc:  # pydantic and yaml both name the offending field
+        console.print(f"[red]Invalid shortlist[/red] at {path}:\n{exc}")
+        console.print("[dim]Nothing was written.[/dim]")
+        raise typer.Exit(code=1) from None
+
+    with Storage() as store:
+        repo = BoardRepo(store)
+        result = apply_to_board(repo, shortlist, dry_run=dry_run)
+        if not dry_run:
+            store.append_audit(
+                "shortlist.import",
+                {
+                    "source": shortlist.source,
+                    "retrieved": shortlist.retrieved,
+                    "leads": len(shortlist.leads),
+                    "added": result.added,
+                },
+            )
+
+    table = Table(title=f"{shortlist.source} — {shortlist.retrieved}")
+    table.add_column("Company")
+    table.add_column("Role")
+    table.add_column("Action")
+    table.add_column("Note")
+    for outcome in result.outcomes:
+        colour = {"added": "green", "left alone": "yellow"}.get(outcome.action, "")
+        action = f"[{colour}]{outcome.action}[/]" if colour else outcome.action
+        table.add_row(outcome.company, outcome.title[:44], action, outcome.detail)
+    console.print(table)
+
+    if dry_run:
+        console.print("[yellow]Dry run — nothing was written.[/yellow]")
+        return
+    console.print(
+        f"[green]{result.added} added[/green], {result.updated} updated, "
+        f"{result.left_alone} left alone."
+    )
+    if result.left_alone:
+        console.print(
+            "[dim]Rows you have already applied to or heard back from are never "
+            "moved by an import.[/dim]"
+        )
+
+
 def _profile_or_exit(store: Storage) -> Profile:
     profile = load_stored_profile(store)
     if profile is None:
