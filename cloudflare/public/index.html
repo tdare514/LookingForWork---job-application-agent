@@ -3,14 +3,40 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>jobagent companion</title>
+    <meta name="theme-color" content="#123b5d" />
+    <meta name="description" content="A read-only mobile tracker for job applications." />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <link rel="stylesheet" href="/styles.css" />
+    <title>jobagent tracker</title>
   </head>
   <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">jobagent companion</p>
+        <h1>Application tracker</h1>
+      </div>
+      <span class="badge" id="connection-status">Loading</span>
+    </header>
     <main>
-      <h1>jobagent companion</h1>
-      <p>Local synthetic preview. The Python app remains the source of truth.</p>
-      <ul id="jobs"><li>Loading…</li></ul>
+      <p class="boundary">Synthetic tracker view. The local Python app remains the source of truth; this shell never submits an application.</p>
+      <section class="summary" aria-labelledby="summary-heading">
+        <h2 id="summary-heading">At a glance</h2>
+        <div id="summary" class="summary-grid" aria-live="polite"></div>
+      </section>
+      <section aria-labelledby="applications-heading">
+        <div class="section-heading">
+          <h2 id="applications-heading">Applications</h2>
+          <label> <span class="sr-only">Filter applications</span>
+            <select id="status-filter">
+              <option value="all">All statuses</option>
+              <option value="new">New</option><option value="pursue">Pursue</option>
+              <option value="ready">Ready</option><option value="applied">Applied</option>
+              <option value="interview">Interview</option><option value="closed">Closed</option>
+            </select>
+          </label>
+        </div>
+        <div id="applications" class="application-list" aria-live="polite"><p>Loading applications…</p></div>
+      </section>
     </main>
     <script type="module" src="/app.js"></script>
   </body>

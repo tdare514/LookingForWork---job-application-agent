@@ -1,9 +1,11 @@
 # Cloudflare companion scaffold
 
-This is the first, deliberately small companion slice for `jobagent`: a static
-Cloudflare Pages frontend and same-origin Pages Functions API backed by a local
-D1-compatible schema. The Python application and its local dossier remain the
-source of truth. The seed migration contains synthetic examples only.
+This is a deliberately small companion slice for `jobagent`: a mobile-first,
+installable Cloudflare Pages tracker and same-origin Pages Functions API backed
+by a local D1-compatible schema. It shows application status, deadlines, notes,
+and next actions using an explicit allowlisted TypeScript contract. The Python
+application and its local dossier remain the source of truth. The seed
+migration and offline snapshot contain synthetic examples only.
 
 ## Local development
 
@@ -20,6 +22,11 @@ local database name and the checked-in migration:
 ```sh
 npx wrangler d1 migrations apply jobagent-local --local
 ```
+
+Without a D1 binding, `/api/jobs` serves the checked-in synthetic fixtures.
+The UI caches the last successful fixture response for read-only offline
+viewing and labels it as an offline snapshot. It has no write route and no
+application-submission path.
 
 Run focused checks with `npm test` and `npm run typecheck`.
 
