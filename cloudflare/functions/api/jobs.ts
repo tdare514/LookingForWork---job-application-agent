@@ -14,7 +14,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
     const result = await env.DB.prepare(
       `SELECT id, company, title, location, url, deadline, status, notes,
         next_action AS nextAction, next_action_date AS nextActionDate,
-        updated_at AS updatedAt
+        updated_at AS updatedAt, version
        FROM jobs ORDER BY COALESCE(deadline, '9999-12-31'), updated_at DESC LIMIT ?`,
     )
       .bind(limit)
@@ -25,7 +25,7 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   const response: TrackerResponse = {
     applications: applications.slice(0, limit),
     limit,
-    source: "synthetic",
+    source: env.DB ? "d1" : "synthetic",
   };
   return Response.json(response, {
     headers: { "Cache-Control": "no-store" },

@@ -21,14 +21,31 @@ export type TrackerApplication = {
   nextAction: string | null;
   nextActionDate: string | null;
   updatedAt: string;
+  version: number;
 };
 
 export type TrackerResponse = {
   applications: TrackerApplication[];
   limit: number;
-  source: "synthetic";
+  source: "synthetic" | "d1";
 };
 
 export function isApplicationStatus(value: string): value is ApplicationStatus {
   return APPLICATION_STATUSES.includes(value as ApplicationStatus);
 }
+
+export const SYNC_FIELDS = [
+  "id",
+  "company",
+  "title",
+  "location",
+  "url",
+  "deadline",
+  "status",
+  "notes",
+  "nextAction",
+  "nextActionDate",
+  "version",
+] as const;
+
+export type SyncApplication = Omit<TrackerApplication, "updatedAt">;

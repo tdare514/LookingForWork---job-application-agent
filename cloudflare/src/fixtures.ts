@@ -13,6 +13,7 @@ export const SYNTHETIC_APPLICATIONS: TrackerApplication[] = [
     nextAction: "Review application package",
     nextActionDate: "2026-09-19",
     updatedAt: "2026-09-19T00:00:00Z",
+    version: 1,
   },
   {
     id: "synthetic-002",
@@ -26,5 +27,6 @@ export const SYNTHETIC_APPLICATIONS: TrackerApplication[] = [
     nextAction: "Read posting and capture requirements",
     nextActionDate: "2026-09-22",
     updatedAt: "2026-09-18T00:00:00Z",
+    version: 1,
   },
 ];

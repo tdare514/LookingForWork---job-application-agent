@@ -76,7 +76,10 @@ The API fails closed unless `FREE_TIER_ENABLED=true`, `ACCOUNT_PLAN=free`, and
 enforces explicit free-tier-safe limits: 50 returned rows, a 16 KiB body
 budget, and 30 requests per client per 60 seconds, with a daily request quota.
 The in-memory limiter is only a local/dev guard; it is not a distributed quota.
-Future write routes must validate input before D1.
+Write routes validate input before D1. `PUT /api/jobs/:id` requires an
+`If-Match` version and returns `409` on stale writes. `POST /api/sync` accepts
+at most 50 allowlisted tracker rows and also returns conflicts instead of
+overwriting newer rows.
 
 ## Authentication foundation
 
@@ -88,6 +91,5 @@ persists the provider token. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
 `SESSION_SECRET` (at least 32 characters) as deployment secrets/variables.
 Authenticated API requests require the session cookie; state-changing requests
 also require the same-origin `jobagent_csrf` cookie value in
-`X-CSRF-Token`. Logout revokes the D1 session.
-Security headers are applied by the Pages middleware. No route submits an
-application or sends dossier data.
+`X-CSRF-Token`. Logout revokes the D1 session. Security headers are applied by
+the Pages middleware. No route submits an application or sends dossier data.
