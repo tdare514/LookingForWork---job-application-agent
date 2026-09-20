@@ -40,7 +40,7 @@ function rateLimited(request: Request, now: number, quota: number): boolean {
 
 export const onRequest: PagesFunction<Env> = async (context) => {
   const pathname = new URL(context.request.url).pathname;
-  if (pathname === "/api/health" || pathname.startsWith("/api/auth/")) {
+  if (!pathname.startsWith("/api/") || pathname === "/api/health" || pathname.startsWith("/api/auth/")) {
     return withSecurityHeaders(await context.next());
   }
   const account = readAccountConfig(context.env as unknown as Record<string, string | undefined>);
