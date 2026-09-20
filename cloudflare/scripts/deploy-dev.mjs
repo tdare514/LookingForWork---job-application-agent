@@ -34,6 +34,11 @@ if (
 }
 
 const check = spawnSync(process.execPath, ["scripts/verify-free-plan.mjs"], {
+  env: {
+    ...process.env,
+    FREE_TIER_ENABLED: "true",
+    ACCOUNT_PLAN: "free",
+  },
   stdio: "inherit",
 });
 if (check.status !== 0) process.exit(check.status ?? 1);

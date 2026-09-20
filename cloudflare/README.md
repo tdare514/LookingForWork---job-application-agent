@@ -33,9 +33,13 @@ Run focused checks with `npm test` and `npm run typecheck`.
 ## Synthetic dev deployment
 
 Remote deployment is deliberately separate from local development and is
-fail-closed. It requires a Cloudflare API token with account read, Pages write,
-and D1 write permissions, plus the account ID. OAuth login is not configured by
-this procedure; do not add a callback URL or secrets for a synthetic deploy.
+fail-closed. It requires a Cloudflare API token with Account Read, Pages write,
+and D1 write permissions, plus the account ID. The free-plan check validates
+account access and requires the operator to explicitly configure
+`FREE_TIER_ENABLED=true` and `ACCOUNT_PLAN=free`; it does not infer billing
+from an endpoint that may require unavailable Billing Read permission. OAuth
+login is not configured by this procedure; do not add a callback URL or secrets
+for a synthetic deploy.
 
 After confirming that the account is free-only, create only the clearly named
 development resources:
@@ -43,6 +47,8 @@ development resources:
 ```sh
 export CLOUDFLARE_ACCOUNT_ID=...
 export CLOUDFLARE_API_TOKEN=...
+export FREE_TIER_ENABLED=true
+export ACCOUNT_PLAN=free
 npm run verify:free
 npx wrangler d1 create jobagent-companion-dev --location enam
 npx wrangler pages project create jobagent-companion-dev --production-branch main
@@ -53,8 +59,9 @@ export CF_DEV_D1_DATABASE_ID=...
 npm run deploy:dev
 ```
 
-`verify:free` rejects missing credentials, API errors, unknown plans, and any
-plan other than the Cloudflare API's exact `free` plan ID. `deploy:dev` also
+`verify:free` rejects missing credentials, account-access errors, missing free
+configuration, and any plan other than the explicitly configured `free` value.
+`deploy:dev` also
 rejects a non-dev Pages name, a non-UUID D1 binding, a missing config, or
 paid-feature bindings before invoking Wrangler. It does not create resources,
 set secrets, upload real data, or deploy the OAuth callback.
@@ -76,10 +83,7 @@ The API fails closed unless `FREE_TIER_ENABLED=true`, `ACCOUNT_PLAN=free`, and
 enforces explicit free-tier-safe limits: 50 returned rows, a 16 KiB body
 budget, and 30 requests per client per 60 seconds, with a daily request quota.
 The in-memory limiter is only a local/dev guard; it is not a distributed quota.
-Write routes validate input before D1. `PUT /api/jobs/:id` requires an
-`If-Match` version and returns `409` on stale writes. `POST /api/sync` accepts
-at most 50 allowlisted tracker rows and also returns conflicts instead of
-overwriting newer rows.
+Future write routes must validate input before D1.
 
 ## Authentication foundation
 
@@ -91,5 +95,6 @@ persists the provider token. Set `GITHUB_CLIENT_ID`, `GITHUB_CLIENT_SECRET`,
 `SESSION_SECRET` (at least 32 characters) as deployment secrets/variables.
 Authenticated API requests require the session cookie; state-changing requests
 also require the same-origin `jobagent_csrf` cookie value in
-`X-CSRF-Token`. Logout revokes the D1 session. Security headers are applied by
-the Pages middleware. No route submits an application or sends dossier data.
+`X-CSRF-Token`. Logout revokes the D1 session.
+Security headers are applied by the Pages middleware. No route submits an
+application or sends dossier data.
