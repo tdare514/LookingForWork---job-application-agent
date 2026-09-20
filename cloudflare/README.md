@@ -30,6 +30,40 @@ application-submission path.
 
 Run focused checks with `npm test` and `npm run typecheck`.
 
+## Synthetic dev deployment
+
+Remote deployment is deliberately separate from local development and is
+fail-closed. It requires a Cloudflare API token with account read, Pages write,
+and D1 write permissions, plus the account ID. OAuth login is not configured by
+this procedure; do not add a callback URL or secrets for a synthetic deploy.
+
+After confirming that the account is free-only, create only the clearly named
+development resources:
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=...
+export CLOUDFLARE_API_TOKEN=...
+npm run verify:free
+npx wrangler d1 create jobagent-companion-dev --location enam
+npx wrangler pages project create jobagent-companion-dev --production-branch main
+cp wrangler.dev.toml.example wrangler.dev.toml
+# Replace REPLACE_WITH_DEV_D1_UUID with the UUID printed by d1 create.
+export CF_DEV_PAGES_PROJECT=jobagent-companion-dev
+export CF_DEV_D1_DATABASE_ID=...
+npm run deploy:dev
+```
+
+`verify:free` rejects missing credentials, API errors, unknown plans, and any
+plan other than the Cloudflare API's exact `free` plan ID. `deploy:dev` also
+rejects a non-dev Pages name, a non-UUID D1 binding, a missing config, or
+paid-feature bindings before invoking Wrangler. It does not create resources,
+set secrets, upload real data, or deploy the OAuth callback.
+
+If the account plan check or the required Cloudflare API token is unavailable,
+stop rather than using the interactive Wrangler OAuth token as a substitute.
+If GitHub OAuth is later enabled, its exact callback URL is a separate
+operator decision and must be configured before testing authenticated routes.
+
 ## Safety boundary
 
 This scaffold does **not** create Cloudflare resources, deploy, or require

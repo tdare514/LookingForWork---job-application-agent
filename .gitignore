@@ -28,6 +28,7 @@ build/
 
 # Node
 node_modules/
+.wrangler/
 
 # Editors and OS
 .DS_Store
