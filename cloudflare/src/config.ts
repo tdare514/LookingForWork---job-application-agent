@@ -3,9 +3,23 @@ export const LIMITS = {
   maxBodyBytes: 16_384,
   rateLimitRequests: 30,
   rateLimitWindowSeconds: 60,
+  maxTrackedClients: 1_000,
+  dailyRequestQuota: 1_000,
 } as const;
 
 export const API_PREFIX = "/api/";
+
+export type AccountConfig = {
+  accountPlan: "free";
+  dailyRequestQuota: number;
+};
+
+export function readAccountConfig(env: Record<string, string | undefined>): AccountConfig | null {
+  if (env.FREE_TIER_ENABLED !== "true" || env.ACCOUNT_PLAN !== "free") return null;
+  const quota = Number.parseInt(env.DAILY_REQUEST_QUOTA ?? "", 10);
+  if (!Number.isInteger(quota) || quota < 1 || quota > LIMITS.dailyRequestQuota) return null;
+  return { accountPlan: "free", dailyRequestQuota: quota };
+}
 
 export function clampLimit(value: string | null): number {
   const parsed = Number.parseInt(value ?? "", 10);

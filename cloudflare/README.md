@@ -30,9 +30,11 @@ credentials. Do not add credentials to this directory. There are no paid
 services, Workers AI, queues, pipelines, email, analytics, premium
 observability, or custom-domain assumptions.
 
-The API has explicit free-tier-safe limits: 50 returned rows, a 16 KiB body
-budget for future write routes, and 30 requests per client per 60 seconds.
+The API fails closed unless `FREE_TIER_ENABLED=true`, `ACCOUNT_PLAN=free`, and
+`DAILY_REQUEST_QUOTA` is a positive value no greater than 1,000. It then
+enforces explicit free-tier-safe limits: 50 returned rows, a 16 KiB body
+budget, and 30 requests per client per 60 seconds, with a daily request quota.
 The in-memory limiter is only a local/dev guard; it is not a distributed quota.
-Future write routes must enforce the body limit and validate input before D1.
+Future write routes must validate input before D1.
 Security headers are applied by the Pages middleware. No route submits an
 application or sends dossier data.

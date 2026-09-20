@@ -2,6 +2,11 @@ name = "jobagent-companion-local"
 compatibility_date = "2026-09-19"
 pages_build_output_dir = "public"
 
+[vars]
+FREE_TIER_ENABLED = "true"
+ACCOUNT_PLAN = "free"
+DAILY_REQUEST_QUOTA = "1000"
+
 # This is a local binding declaration only. Creating a remote D1 database is
 # intentionally out of scope for this scaffold.
 [[d1_databases]]
