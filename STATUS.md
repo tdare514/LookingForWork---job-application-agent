@@ -4,7 +4,7 @@ Snapshot of **now**, not a changelog. Update it in the same commit as the change
 
 Last updated: 2026-09-16
 
-Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, digest. Everything left before the 20th is mine: the company paragraph and the "why this company" answer for RBC and BMO.
+Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, digest. Everything left before the 20th is mine: the company paragraph and the "why this company" answer for the two nearest-deadline applications.
 
 ## What works
 
@@ -36,7 +36,7 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 
 ## Next
 
-1. Send the RBC and BMO applications. Packages are built; the company paragraph and the "why this company" answer still need me.
+1. Send the two nearest-deadline applications. Packages are built; the company paragraph and the "why this company" answer still need me.
 2. Rephrasing toward a posting's vocabulary, through the same truthfulness gate.
 3. Extend the extraction eval corpus toward the 50 postings #30 asks for (#65). Twelve is enough to catch a gross regression and not enough to trust a precision number.
 
@@ -57,4 +57,4 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 
 ## Deadlines that drive this
 
-Winter 2027 co-op applications, tracked on the board. RBC and BMO close 2026-09-20; Scotiabank 2026-10-02. The tool exists to serve these — a feature that does not help before those dates is not urgent.
+Winter 2027 co-op applications, tracked on the board. Two close 2026-09-20; Scotiabank 2026-10-02. The tool exists to serve these — a feature that does not help before those dates is not urgent.
