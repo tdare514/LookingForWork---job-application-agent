@@ -16,7 +16,7 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 403 tests pass, none skipped. Missing pursue, borderline or skip ranking tiers fail the suite (#76). `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 411 tests pass, none skipped. Missing pursue, borderline or skip ranking tiers fail the suite (#76). `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
 - `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Adapters for RBC, BMO, TD (Workday) and any Greenhouse board.
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
@@ -28,11 +28,11 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 - `jobagent score` — hard filters then a decomposed score, both stored per job. Filters cut for a stated reason (`--filtered` lists them); absence never cuts, so a posting silent on pay, sponsorship or level is judged, not dropped. `--explain <id>` prints the five components with the weight each carried and a line on what it looked at. A component with nothing to judge on is dropped and the remaining weights rescale, so a row with no description still ranks.
 - `jobagent shortlist` / `digest` / `daily` — the reading queue (#32). The digest is four capped sections: new since you last looked, roles whose score moved and which component moved it, reposts with their sighting count, and what the filters cut aggregated by rule. `daily` chains fetch → extract → score → digest unattended and is safe for cron; it fetches only sources named explicitly. Both take `--json`.
 - `jobagent skip <id> -r "..."` / `snooze <id> --days N` — a skip records why, and `report` aggregates the reasons. A snooze hides a row until a date and it returns on its own; it is not a state, so nothing has to be undone.
-- Pre-commit hook blocks databases, rendered documents and credential shapes. Verified firing on a fake key.
+- Pre-commit hook blocks databases, rendered documents, snapshots and credential shapes. Verified firing on a fake key and on a real `snapshot.json`.
 
 ## In progress
 
-- **ADR 0008 is `Proposed` and waiting on me.** It supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy. The decision in 0005 stands; only its reasoning changes. Accept or reject it; nothing else is in flight.
+- **ADRs 0008 and 0009 are `Proposed` and waiting on me.** 0008 supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. 0009 is the phone snapshot (`jobagent snapshot`, `cloudflare/public/`), which downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login: built and tested, but **no Cloudflare project exists and nothing has been uploaded**, and the Access gate must be configured and verified before it is — `cloudflare/README.md` has the order.
 
 ## Next
 

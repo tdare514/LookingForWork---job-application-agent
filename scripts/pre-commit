@@ -10,9 +10,14 @@ staged=$(git diff --cached --name-only --diff-filter=ACM)
 [ -z "$staged" ] && exit 0
 
 # 1. Nothing from the data directory or a rendered document may be committed.
-if echo "$staged" | grep -qE '(^|/)(data/|.*\.(db|sqlite3?|pdf|docx)$)'; then
+#
+# `snapshot.json` is here because the phone snapshot (ADR 0009) is written into
+# the working tree, names every company on the board, and this repository is
+# public. `.gitignore` covers it too; this is the second lock.
+leaky='(^|/)(data/|snapshot\.json$|.*\.(db|sqlite3?|pdf|docx)$)'
+if echo "$staged" | grep -qE "$leaky"; then
   echo "pre-commit: refusing to commit data or generated documents:" >&2
-  echo "$staged" | grep -E '(^|/)(data/|.*\.(db|sqlite3?|pdf|docx)$)' >&2
+  echo "$staged" | grep -E "$leaky" >&2
   exit 1
 fi
 

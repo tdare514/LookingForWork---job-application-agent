@@ -9,6 +9,10 @@
 *.pdf
 *.docx
 
+# The phone snapshot — real board rows, and this repository is public.
+# See docs/adr/0009-phone-snapshot.md
+snapshot.json
+
 # Secrets
 .env
 .env.*
