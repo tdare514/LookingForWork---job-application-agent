@@ -32,7 +32,7 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 
 ## In progress
 
-- **ADRs 0008 and 0009 are `Proposed` and waiting on me.** 0008 supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. 0009 is the phone snapshot (`jobagent snapshot`, `cloudflare/public/`), which downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login: built and tested, but **no Cloudflare project exists and nothing has been uploaded**, and the Access gate must be configured and verified before it is — `cloudflare/README.md` has the order.
+- **ADR 0008 is `Proposed` and waiting on me.** It supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. ADR 0009 is accepted: the phone snapshot (`jobagent snapshot`, `cloudflare/public/`) downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login. **No Cloudflare project exists and nothing has been uploaded**; the Access gate must be configured and verified before it is — `cloudflare/README.md` has the order.
 
 ## Next
 

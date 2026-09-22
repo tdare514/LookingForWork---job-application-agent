@@ -1,6 +1,6 @@
 # 0009 — A read-only phone snapshot, behind Cloudflare Access
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-22
 
 Extends 0003. The local-first decision stands; this carves one narrow, named
