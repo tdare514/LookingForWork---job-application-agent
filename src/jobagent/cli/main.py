@@ -1161,5 +1161,41 @@ def list_jobs() -> None:
     console.print(table)
 
 
+@app.command()
+def snapshot(
+    destination: Path = typer.Argument(
+        ..., help="File to write the snapshot JSON into, e.g. cloudflare/public/snapshot.json"
+    ),
+    as_json: bool = typer.Option(
+        False, "--json", help="Print to stdout instead of writing a file."
+    ),
+) -> None:
+    """Write the phone snapshot: the only board fields allowed off this machine.
+
+    Builds the file. Does not upload it -- pushing is a separate, deliberate act
+    by a human, and nothing in this tool reaches Cloudflare on its own.
+    """
+    import json
+    from datetime import UTC, datetime
+
+    from jobagent.tracking.snapshot import build as build_snapshot
+
+    with Storage() as store:
+        payload = build_snapshot(BoardRepo(store).all(), generated_at=datetime.now(UTC)).as_dict()
+
+    if as_json:
+        console.print_json(data=payload)
+        return
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    destination.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
+    destination.chmod(0o600)
+    console.print(f"[green]Wrote[/green] {destination} ({len(payload['rows'])} rows)")
+    console.print(
+        "[yellow]This names every company on your board and where each one stands.[/yellow] "
+        "It belongs behind the Cloudflare Access login -- see docs/adr/0009."
+    )
+
+
 if __name__ == "__main__":
     app()

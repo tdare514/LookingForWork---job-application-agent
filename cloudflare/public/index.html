@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#123b5d" />
+    <meta name="description" content="A read-only phone view of the jobagent board." />
+    <meta name="robots" content="noindex, nofollow" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="stylesheet" href="styles.css" />
+    <title>jobagent board</title>
+  </head>
+  <body>
+    <header class="site-header">
+      <div>
+        <p class="eyebrow">jobagent</p>
+        <h1>Board</h1>
+      </div>
+      <span class="badge" id="snapshot-age">Loading</span>
+    </header>
+    <main>
+      <p class="boundary">
+        A snapshot, not the live board — it is as current as the last upload. The
+        laptop stays the source of truth. Nothing here can change a row or submit
+        an application.
+      </p>
+      <section class="summary" aria-labelledby="summary-heading">
+        <h2 id="summary-heading">At a glance</h2>
+        <div id="summary" class="summary-grid" aria-live="polite"></div>
+      </section>
+      <section aria-labelledby="applications-heading">
+        <div class="section-heading">
+          <h2 id="applications-heading">Roles</h2>
+          <label>
+            <span class="sr-only">Filter by status</span>
+            <select id="status-filter">
+              <option value="all">All statuses</option>
+              <option value="new">New</option>
+              <option value="ready">Ready</option>
+              <option value="applied">Applied</option>
+              <option value="waiting">Waiting</option>
+              <option value="interview">Interview</option>
+              <option value="offer">Offer</option>
+              <option value="rejected">Rejected</option>
+              <option value="skipped">Skipped</option>
+            </select>
+          </label>
+        </div>
+        <div id="applications" class="application-list" aria-live="polite">
+          <p>Loading…</p>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="app.js"></script>
+  </body>
+</html>

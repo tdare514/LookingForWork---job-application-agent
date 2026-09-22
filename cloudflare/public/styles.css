@@ -1,0 +1,96 @@
+:root {
+  color: #17202a;
+  background: #f4f7f9;
+  font-family: system-ui, sans-serif;
+  line-height: 1.5;
+}
+* { box-sizing: border-box; }
+body { margin: 0; }
+
+.site-header {
+  align-items: center;
+  background: #123b5d;
+  color: white;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  padding: 1.5rem max(1rem, calc((100% - 56rem) / 2));
+}
+main { margin: 0 auto; max-width: 56rem; padding: 1rem; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { font-size: clamp(1.5rem, 5vw, 2rem); margin-bottom: 0; }
+h2 { font-size: 1.15rem; margin-bottom: 0.75rem; }
+.eyebrow {
+  font-size: 0.75rem;
+  letter-spacing: 0.1em;
+  margin-bottom: 0.25rem;
+  text-transform: uppercase;
+}
+
+.badge, .status {
+  border-radius: 999px;
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.2rem 0.6rem;
+  text-transform: capitalize;
+  white-space: nowrap;
+}
+.badge { background: #fff; color: #123b5d; }
+.badge-good { color: #17643a; }
+.badge-muted { color: #53616d; }
+
+.boundary { background: #fff5d6; border-left: 4px solid #b97800; padding: 0.75rem; }
+
+.summary { margin: 1.5rem 0; }
+.summary-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(3, 1fr); }
+.summary-card, .application-card {
+  background: white;
+  border: 1px solid #d7e0e6;
+  border-radius: 0.75rem;
+  box-shadow: 0 1px 2px #17202a12;
+  padding: 1rem;
+}
+.summary-card span { color: #53616d; display: block; font-size: 0.8rem; }
+.summary-card strong { font-size: 1.6rem; }
+
+.section-heading {
+  align-items: center;
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 0.75rem;
+}
+select {
+  background: white;
+  border: 1px solid #8b9aa5;
+  border-radius: 0.4rem;
+  font: inherit;
+  padding: 0.45rem;
+}
+
+.application-list { display: grid; gap: 0.75rem; }
+.card-topline { display: flex; justify-content: space-between; gap: 0.5rem; }
+
+/* Mirrors the board's traffic lights: green sent, yellow wants attention, red dead. */
+.status { background: #e6edf2; color: #334b5d; }
+.status-ready, .status-waiting { background: #fff0c2; color: #805500; }
+.status-applied, .status-interview, .status-offer { background: #dff3e7; color: #17643a; }
+.status-rejected, .status-skipped { background: #fbe3e3; color: #8a2020; }
+
+.deadline { color: #53616d; font-size: 0.85rem; }
+.application-card h3 { margin: 0.75rem 0 0; }
+.company { color: #53616d; margin-bottom: 0.5rem; }
+.posting-link { color: #075a91; display: inline-block; font-weight: 700; margin-top: 0.5rem; }
+.empty { color: #53616d; }
+.sr-only {
+  clip-path: inset(50%);
+  height: 1px;
+  overflow: hidden;
+  position: absolute;
+  white-space: nowrap;
+  width: 1px;
+}
+
+@media (min-width: 42rem) {
+  .application-list { grid-template-columns: repeat(2, 1fr); }
+}

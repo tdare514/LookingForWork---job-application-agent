@@ -34,6 +34,11 @@ class Destination(StrEnum):
     NOWHERE = "nowhere"
     MODEL = "model_provider"
     JOB_SITE = "job_site"
+    # The phone snapshot (ADR 0009): a static file pushed to Cloudflare Pages
+    # behind a Cloudflare Access login. Reachable by the user on a phone, by
+    # nobody else. Cloudflare can read what is stored there, so this is a real
+    # third party -- it is narrower than `NOWHERE`, not equivalent to it.
+    PUBLIC_SNAPSHOT = "public_snapshot"
 
 
 @dataclass(frozen=True)
@@ -72,13 +77,24 @@ REGISTRY: tuple[PIIField, ...] = (
         (Destination.MODEL, Destination.JOB_SITE),
         RETENTION_UNTIL_DELETED,
     ),
+    # Downgraded from CRITICAL/NOWHERE to HIGH/PUBLIC_SNAPSHOT deliberately, by
+    # the owner's decision, so the phone snapshot can show it (ADR 0009).
+    #
+    # Nothing about the underlying risk was reassessed: paired with the company
+    # name this is still the record of approaching employers while employed
+    # elsewhere, and disclosure is still a career event. What changed is that
+    # the owner accepted that risk in exchange for seeing status on a phone,
+    # with the Cloudflare Access login as the mitigation. Read the ADR before
+    # widening this further -- the reclassification is the whole reason
+    # `test_nothing_critical_is_sent_to_a_third_party` no longer covers it.
     PIIField(
         "jobs",
         "state",
         "Where an application stands. With the company name this is the record "
-        "of approaching employers while employed elsewhere.",
-        Sensitivity.CRITICAL,
-        (Destination.NOWHERE,),
+        "of approaching employers while employed elsewhere. Leaves the machine "
+        "only in the phone snapshot, behind Cloudflare Access.",
+        Sensitivity.HIGH,
+        (Destination.PUBLIC_SNAPSHOT,),
         RETENTION_UNTIL_DELETED,
     ),
     PIIField(

@@ -27,6 +27,7 @@ The controls below are sized for that, not for a hobby script.
 | Accidental publication | Application history pushed to a public repo | Data directory outside the repo; `.gitignore` covers artifacts; CI check for PII-shaped content |
 | Third-party exposure | PII sent to model or job-site APIs | Minimization at the LLM boundary; per-call purpose logging; no compensation or immigration data in prompts unless the task requires it |
 | Supply chain | Malicious dependency reading the data directory | Pinned dependencies with hashes; dependency audit in CI; minimal dependency surface |
+| Snapshot exposure | Phone snapshot readable by anyone who finds the Pages URL | Cloudflare Access login in front of the project; allowlisted fields only (ADR 0009); `snapshot.json` gitignored and refused by the pre-commit hook |
 | Unauthorized outbound action | Agent submits an application the user never saw | Structural approval gate; audit log; no submission code path without a recorded approval |
 | Account lockout or ToS action | Aggressive automation against a job site | Central rate limiting; identifiable user agent; per-source terms compliance |
 
@@ -41,6 +42,11 @@ Written down rather than pretended away:
 - Job sites receive the application. That is the purpose of the system.
 - A user who disables the approval gate by editing the code can do so. The gate
   defends against agent error, not against its owner.
+- Cloudflare receives company names, titles and application status in the phone
+  snapshot (ADR 0009). It sits behind an Access login, but Cloudflare can read
+  what is stored there, and the login is the only thing between that file and
+  anyone else. `jobs.state` was downgraded from critical to permit this; the
+  risk was accepted, not reassessed.
 
 ## PII inventory
 
