@@ -1,5 +1,7 @@
 import { spawnSync } from "node:child_process";
-import { readFile } from "node:fs/promises";
+import { cp, mkdtemp, readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 
 const projectName = process.env.CF_DEV_PAGES_PROJECT;
 const databaseId = process.env.CF_DEV_D1_DATABASE_ID;
@@ -43,20 +45,20 @@ const check = spawnSync(process.execPath, ["scripts/verify-free-plan.mjs"], {
 });
 if (check.status !== 0) process.exit(check.status ?? 1);
 
-const deploy = spawnSync(
-  "npx",
-  [
-    "wrangler",
-    "pages",
-    "deploy",
-    "public",
-    "--project-name",
-    projectName,
-    "--branch",
-    "dev",
-    "--config",
-    configPath,
-  ],
-  { stdio: "inherit" },
-);
-process.exit(deploy.status ?? 1);
+const stagingDir = await mkdtemp(join(tmpdir(), "jobagent-pages-deploy-"));
+try {
+  await cp("public", join(stagingDir, "public"), { recursive: true });
+  await cp("functions", join(stagingDir, "functions"), { recursive: true });
+  await cp(configPath, join(stagingDir, "wrangler.toml"));
+
+  // Pages rejects --config when it points at a custom path. Staging the
+  // validated config at the default name keeps the D1 binding in the deploy.
+  const deploy = spawnSync(
+    "npx",
+    ["wrangler", "pages", "deploy", "public", "--project-name", projectName, "--branch", "dev"],
+    { cwd: stagingDir, stdio: "inherit" },
+  );
+  process.exitCode = deploy.status ?? 1;
+} finally {
+  await rm(stagingDir, { recursive: true, force: true });
+}

@@ -61,10 +61,13 @@ npm run deploy:dev
 
 `verify:free` rejects missing credentials, account-access errors, missing free
 configuration, and any plan other than the explicitly configured `free` value.
-`deploy:dev` also
-rejects a non-dev Pages name, a non-UUID D1 binding, a missing config, or
-paid-feature bindings before invoking Wrangler. It does not create resources,
-set secrets, upload real data, or deploy the OAuth callback.
+`deploy:dev` also rejects a non-dev Pages name, a non-UUID D1 binding, a
+missing config, or paid-feature bindings before invoking Wrangler. Pages
+rejects `--config` when it names a custom file, so the script stages the
+validated `wrangler.dev.toml` as the default `wrangler.toml` in a temporary
+directory before invoking the supported Pages deploy command. The temporary
+directory is removed afterward. It does not create resources, set secrets,
+upload real data, or deploy the OAuth callback.
 
 If the account plan check or the required Cloudflare API token is unavailable,
 stop rather than using the interactive Wrangler OAuth token as a substitute.
