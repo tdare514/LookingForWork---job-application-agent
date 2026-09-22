@@ -64,8 +64,10 @@ configuration, and any plan other than the explicitly configured `free` value.
 `deploy:dev` also rejects a non-dev Pages name, a non-UUID D1 binding, a
 missing config, or paid-feature bindings before invoking Wrangler. Pages
 rejects `--config` when it names a custom file, so the script stages the
-validated `wrangler.dev.toml` as the default `wrangler.toml` in a temporary
-directory before invoking the supported Pages deploy command. The temporary
+validated `wrangler.dev.toml` as the default `wrangler.toml`, along with the
+`public/`, `functions/`, and `src/` trees, in a temporary directory before
+invoking the supported Pages deploy command. Including `src/` preserves the
+relative imports used by the TypeScript Pages Functions bundle. The temporary
 directory is removed afterward. It does not create resources, set secrets,
 upload real data, or deploy the OAuth callback.
 

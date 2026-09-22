@@ -49,6 +49,7 @@ const stagingDir = await mkdtemp(join(tmpdir(), "jobagent-pages-deploy-"));
 try {
   await cp("public", join(stagingDir, "public"), { recursive: true });
   await cp("functions", join(stagingDir, "functions"), { recursive: true });
+  await cp("src", join(stagingDir, "src"), { recursive: true });
   await cp(configPath, join(stagingDir, "wrangler.toml"));
 
   // Pages rejects --config when it points at a custom path. Staging the
