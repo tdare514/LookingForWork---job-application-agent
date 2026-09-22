@@ -2,7 +2,7 @@
 
 Snapshot of **now**, not a changelog. Update it in the same commit as the change that made it stale. Keep it under ~60 lines; git history holds the rest.
 
-Last updated: 2026-09-16
+Last updated: 2026-09-22
 
 Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, digest. Everything left before the 20th is mine: the company paragraph and the "why this company" answer for RBC and BMO.
 
@@ -54,7 +54,3 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 - `--json` exists on `shortlist` and `digest` only; every other command prints a Rich table and composes with nothing. There are still no global flags (`--config`, `--data-dir`, `--verbose`), and the data directory is settable only through `JOBAGENT_DATA_DIR`. #26 is the rest of that surface.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.
-
-## Deadlines that drive this
-
-Winter 2027 co-op applications, tracked on the board. RBC and BMO close 2026-09-20; Scotiabank 2026-10-02. The tool exists to serve these — a feature that does not help before those dates is not urgent.
