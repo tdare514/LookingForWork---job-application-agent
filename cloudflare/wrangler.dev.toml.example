@@ -1,0 +1,14 @@
+name = "jobagent-companion-dev"
+compatibility_date = "2026-09-19"
+pages_build_output_dir = "public"
+
+[vars]
+FREE_TIER_ENABLED = "true"
+ACCOUNT_PLAN = "free"
+DAILY_REQUEST_QUOTA = "1000"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "jobagent-companion-dev"
+database_id = "REPLACE_WITH_DEV_D1_UUID"
+migrations_dir = "migrations"

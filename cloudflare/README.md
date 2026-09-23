@@ -1,11 +1,14 @@
-# Phone snapshot
+# Phone view
 
-A static, read-only view of the board, for reading on a phone. Decided in
-[ADR 0009](../docs/adr/0009-phone-snapshot.md).
+Two things live here:
 
-`public/` is the whole thing: four files and no build step. No framework, no
-`package.json`, no database, no API, no write route. The page reads
-`snapshot.json` sitting beside it and renders it.
+- **The snapshot** ([ADR 0009](../docs/adr/0009-phone-snapshot.md), accepted):
+  `public/` is a static, read-only page that renders `snapshot.json` sitting
+  beside it. No build step, no API, no write route. Everything from *What it
+  carries* to *Local check* below is about this.
+- **The hosted companion** ([ADR 0010](../docs/adr/0010-hosted-tracker-companion.md),
+  proposed): Pages Functions, a D1 database and owner-only writes. It is built
+  and tested against synthetic data only. See *Companion* at the end.
 
 ## What it carries
 
@@ -52,3 +55,49 @@ because this repository is public.
 Any static server works, e.g. `python3 -m http.server` from `public/`. With no
 `snapshot.json` present the page renders empty and reports "No snapshot", which
 is also what a failed fetch looks like.
+
+## Companion
+
+Not for real data until ADR 0010 is accepted and its preconditions are met.
+
+```sh
+cd cloudflare
+npm ci                  # the locked toolchain; never a bare `npm install`
+npm run typecheck
+npm test                # also runs in CI
+npx wrangler pages dev public
+```
+
+The API refuses to serve unless `FREE_TIER_ENABLED=true`, `ACCOUNT_PLAN=free` and
+`DAILY_REQUEST_QUOTA` (1–1000) are set, as `wrangler.toml` does for local runs.
+It caps rows at 50, bodies at 16 KiB (and refuses a write that does not declare
+its length), and requests at 30 per client per minute. The limiter is in memory
+per isolate: a brake, not a quota.
+
+### Synthetic dev deployment
+
+Separate from local development, and fail-closed. It needs a Cloudflare API
+token with Account Read, Pages write and D1 write, plus the account ID. The
+free-plan check confirms the token can read the account and requires you to
+declare the plan explicitly; it does not infer billing.
+
+```sh
+export CLOUDFLARE_ACCOUNT_ID=... CLOUDFLARE_API_TOKEN=...
+export FREE_TIER_ENABLED=true ACCOUNT_PLAN=free
+npm run verify:free
+npx wrangler d1 create jobagent-companion-dev --location enam
+npx wrangler pages project create jobagent-companion-dev --production-branch main
+cp wrangler.dev.toml.example wrangler.dev.toml   # fill in the D1 UUID
+export CF_DEV_PAGES_PROJECT=jobagent-companion-dev CF_DEV_D1_DATABASE_ID=...
+npm run deploy:dev
+```
+
+`deploy:dev` refuses a Pages project not named `jobagent-companion-dev`, a
+non-UUID D1 id, a config missing the free-tier settings or naming a paid
+binding, a `public/snapshot.json` (real rows do not go to a synthetic
+project), and a missing `node_modules` (so the locked `wrangler` is the one
+that runs). Pages will not take `--config` pointing at a custom file, so the
+script stages `public/`, `functions/`, `src/` and the validated config as
+`wrangler.toml` in a temporary directory, deploys from there, and removes it.
+
+It creates no resources, sets no secrets and uploads no real data.
