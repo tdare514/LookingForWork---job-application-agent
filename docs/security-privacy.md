@@ -28,6 +28,7 @@ The controls below are sized for that, not for a hobby script.
 | Third-party exposure | PII sent to model or job-site APIs | Minimization at the LLM boundary; per-call purpose logging; no compensation or immigration data in prompts unless the task requires it |
 | Supply chain | Malicious dependency reading the data directory | Pinned dependencies with hashes; dependency audit in CI; minimal dependency surface |
 | Snapshot exposure | Phone snapshot readable by anyone who finds the Pages URL | Cloudflare Access login in front of the project; allowlisted fields only (ADR 0009); `snapshot.json` gitignored and refused by the pre-commit hook |
+| Hosted tracker write path (proposed, ADR 0010) | A forged or stale write to the D1 copy, or a critical field gaining an off-machine copy | Access, then an owner-only GitHub session, then same-origin CSRF on writes; optimistic versions, stale writes refused; field allowlist enforced on write and checked against the registry by `tests/test_cloudflare_contract.py`. Synthetic data only until 0010 is accepted |
 | Unauthorized outbound action | Agent submits an application the user never saw | Structural approval gate; audit log; no submission code path without a recorded approval |
 | Account lockout or ToS action | Aggressive automation against a job site | Central rate limiting; identifiable user agent; per-source terms compliance |
 

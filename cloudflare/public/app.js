@@ -1,4 +1,5 @@
-// Reads snapshot.json and renders it. No write path, no API, no credentials.
+// Renders the board from the signed-in tracker API when there is one (ADR 0010),
+// otherwise from snapshot.json (ADR 0009). No write path yet, no credentials.
 //
 // The rows are deliberately not cached in localStorage. Cloudflare Access gates
 // network requests, not data already sitting in the browser -- a cached copy
@@ -76,14 +77,35 @@ function renderApplications() {
         </div>
         <h3>${escapeHtml(row.title)}</h3>
         <p class="company">${escapeHtml(row.company)}${row.location ? ` · ${escapeHtml(row.location)}` : ""}</p>
+        ${row.nextAction ? `<p class="next-action">Next: ${escapeHtml(row.nextAction)}${row.nextActionDate ? ` (${escapeHtml(formatDate(row.nextActionDate))})` : ""}</p>` : ""}
         ${link ? `<a class="posting-link" href="${link}" target="_blank" rel="noreferrer noopener">View posting <span aria-hidden="true">→</span></a>` : ""}`;
       return article;
     }),
   );
 }
 
+// The API speaks `status`; the page and the snapshot speak `state`.
+async function loadFromApi() {
+  const response = await fetch("/api/jobs?limit=50", {
+    headers: { Accept: "application/json" },
+    credentials: "same-origin",
+  });
+  if (!response.ok) return false; // signed out, not configured, or not deployed
+  const payload = await response.json();
+  if (payload.source !== "d1") return false; // synthetic fixtures are not the board
+  rows = (payload.applications ?? []).map((row) => ({ ...row, state: row.status }));
+  snapshotAge.textContent = "Live";
+  snapshotAge.className = "badge badge-good";
+  return true;
+}
+
 async function load() {
   try {
+    if (await loadFromApi().catch(() => false)) {
+      renderSummary();
+      renderApplications();
+      return;
+    }
     const response = await fetch("snapshot.json", { headers: { Accept: "application/json" } });
     if (!response.ok) throw new Error(`snapshot.json returned ${response.status}`);
     const payload = await response.json();

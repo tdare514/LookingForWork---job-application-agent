@@ -91,6 +91,32 @@ Set as deployment variables and secrets, never in a file: `GITHUB_CLIENT_ID`,
 `SESSION_SECRET` (at least 32 characters, e.g. `openssl rand -base64 32`).
 Without them the auth routes answer 503. Apply `migrations/` before first use.
 
+### Tracker API
+
+Behind the session gate:
+
+- `GET /api/jobs` — up to 50 rows, deadline first. Without a D1 binding it
+  serves two synthetic fixtures and says so (`source: "synthetic"`); the page
+  ignores those and falls back to `snapshot.json`.
+- `PUT /api/jobs/:id` — replace one row's tracker fields. `If-Match` must carry
+  the version read; a stale one is `409` with the current version, never an
+  overwrite.
+- `POST /api/sync` — up to 50 rows from the laptop. Unseen rows land at
+  version 1; seen rows must name their current version. If any row is stale,
+  nothing in the batch is written.
+
+The fields are `SYNC_FIELDS` in `src/types.ts`, and a payload carrying any
+other field is refused rather than trimmed. `notes` and `state_reason` are not
+among them and the table has no column for them; `status` takes exactly the
+local board's states. `tests/test_cloudflare_contract.py` fails if either drifts.
+
+All SQL lives in `src/tracker.ts`, and the tests run it against node:sqlite,
+which rejects a mis-bound statement just as D1 does.
+
+Not built yet: the local sync client (nothing in `src/jobagent/` calls these
+routes), edit controls on the page, and a `purge` that reaches D1. ADR 0010
+lists these as preconditions for real data.
+
 ### Synthetic dev deployment
 
 Separate from local development, and fail-closed. It needs a Cloudflare API
