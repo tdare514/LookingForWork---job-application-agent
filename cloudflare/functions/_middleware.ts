@@ -1,8 +1,9 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
+import { parseCookies } from "../src/auth.js";
 import { bodyTooLarge, LIMITS, readAccountConfig } from "../src/config.js";
 import { withSecurityHeaders } from "../src/security.js";
 
-type Env = { FREE_TIER_ENABLED?: string; ACCOUNT_PLAN?: string; DAILY_REQUEST_QUOTA?: string };
+type Env = { DB: D1Database; FREE_TIER_ENABLED?: string; ACCOUNT_PLAN?: string; DAILY_REQUEST_QUOTA?: string };
 
 // Per-isolate counters. Cloudflare runs many isolates and recycles them, so this
 // is a brake on a runaway client, not a distributed quota.
@@ -59,6 +60,24 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
   if (rateLimited(context.request, Date.now(), account.dailyRequestQuota)) {
     return refuse(429, "rate limit exceeded");
+  }
+  // Login and logout are limited above but cannot require the session they create or end.
+  if (pathname.startsWith("/api/auth/")) return withSecurityHeaders(await context.next());
+
+  const cookies = parseCookies(context.request.headers.get("cookie"));
+  const session = cookies.get("jobagent_session");
+  if (!session) return refuse(401, "access denied");
+  const record = await context.env.DB.prepare(
+    "SELECT id FROM owner_sessions WHERE id = ? AND revoked_at IS NULL AND expires_at > ?",
+  ).bind(session, new Date().toISOString()).first();
+  if (!record) return refuse(401, "access denied");
+
+  if (["POST", "PUT", "PATCH", "DELETE"].includes(context.request.method)) {
+    const origin = context.request.headers.get("origin");
+    const csrf = cookies.get("jobagent_csrf");
+    if (origin !== new URL(context.request.url).origin || !csrf || csrf !== context.request.headers.get("x-csrf-token")) {
+      return refuse(403, "request denied");
+    }
   }
   return withSecurityHeaders(await context.next());
 };

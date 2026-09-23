@@ -74,6 +74,23 @@ It caps rows at 50, bodies at 16 KiB (and refuses a write that does not declare
 its length), and requests at 30 per client per minute. The limiter is in memory
 per isolate: a brake, not a quota.
 
+### Owner-only sign-in
+
+Cloudflare Access stays in front of everything. Behind it, every API route
+except `/api/health` and `/api/auth/*` needs a session, and a write also needs
+the request's `Origin` to match and the `jobagent_csrf` cookie echoed in
+`X-CSRF-Token`.
+
+`/api/auth/github` starts GitHub OAuth with PKCE and an encrypted, ten-minute,
+HttpOnly transaction cookie. The callback admits only the numeric
+`OWNER_GITHUB_ID`, consumes the OAuth state whether or not it succeeds, keeps
+no GitHub token, and stores a one-day opaque session in D1. Logout revokes it.
+
+Set as deployment variables and secrets, never in a file: `GITHUB_CLIENT_ID`,
+`GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` (exact), `OWNER_GITHUB_ID`, and
+`SESSION_SECRET` (at least 32 characters, e.g. `openssl rand -base64 32`).
+Without them the auth routes answer 503. Apply `migrations/` before first use.
+
 ### Synthetic dev deployment
 
 Separate from local development, and fail-closed. It needs a Cloudflare API
