@@ -342,19 +342,69 @@ def export_cmd(
     )
 
 
+# What a hosted purge cannot reach, said plainly rather than implied away.
+HOSTED_PURGE_LIMITS = (
+    "D1 Time Travel can still restore the database to a point before this purge "
+    "for its retention window (7 days on the free plan).",
+    "Earlier Pages deployments, and any snapshot.json in them, stay reachable at "
+    "their deployment URLs until deleted in the Cloudflare dashboard.",
+    "Cloudflare's own request logs are outside anything this tool can touch.",
+)
+
+
 @app.command("purge")
 def purge_cmd(
     yes: bool = typer.Option(False, "--yes", help="Required. Purge never runs unattended."),
+    skip_hosted: bool = typer.Option(
+        False, "--skip-hosted", help="Purge this machine even if the hosted copy cannot be reached."
+    ),
 ) -> None:
-    """Delete the dossier, then verify nothing recoverable remains."""
+    """Delete the dossier and the hosted copy, then verify nothing recoverable remains."""
+    from jobagent.companion import client as companion
     from jobagent.core.lifecycle import purge as run_purge
 
     data_dir = default_data_dir()
+    try:
+        hosted = companion.CompanionConfig.from_env()
+    except companion.CompanionNotConfigured as exc:
+        console.print(f"[red]Companion half-configured:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
     if not yes:
         console.print(f"This deletes everything under [bold]{data_dir}[/bold]:")
         console.print("  profile, resume, jobs, application history, documents, audit log.")
+        if hosted is not None:
+            console.print(f"  and every row the hosted tracker at {hosted.url} holds.")
         console.print("Re-run with [bold]--yes[/bold] if that is what you want.")
         raise typer.Exit(code=1)
+
+    # Hosted first. Once the local dossier is gone, nothing is left to remind
+    # you that a copy exists elsewhere, so a failure here stops the purge.
+    if hosted is not None:
+        try:
+            with companion.connect(hosted) as client:
+                client.check_gate()
+                result = client.purge()
+        except (companion.AccessGateOff, companion.CompanionError, OSError) as exc:
+            console.print(f"[red]Hosted copy not purged:[/red] {exc}")
+            if not skip_hosted:
+                console.print("Nothing was deleted. Fix that, or re-run with --skip-hosted.")
+                raise typer.Exit(code=1) from exc
+        else:
+            if not result.get("clean"):
+                console.print(f"[red]Hosted copy survived purge:[/red] {result.get('remaining')}")
+                if not skip_hosted:
+                    raise typer.Exit(code=1)
+            else:
+                removed = sum(result.get("removed", {}).values())
+                console.print(
+                    f"[green]Hosted tracker emptied[/green] ({removed} row(s)). Verified."
+                )
+            console.print("[yellow]Not reachable from here:[/yellow]")
+            for limit in HOSTED_PURGE_LIMITS:
+                console.print(f"  - {limit}")
+    else:
+        console.print("[dim]No hosted companion configured; purging this machine only.[/dim]")
 
     report = run_purge()
     console.print(

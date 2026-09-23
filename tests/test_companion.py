@@ -256,3 +256,61 @@ def test_daily_never_syncs() -> None:
     """`daily` is the cron entry point; sending anything off-machine must stay a human act."""
     assert "sync" not in inspect.getsource(cli.daily)
     assert "companion" not in inspect.getsource(cli.daily)
+
+
+# -- purge (ADR 0010, precondition 3) ----------------------------------------
+
+
+def _purge(*args: str) -> Any:
+    return CliRunner().invoke(cli.app, ["purge", *args])
+
+
+def test_purge_empties_the_hosted_copy_then_the_machine(fake: FakeCompanion, data_dir: Any) -> None:
+    _board(("Example North", "Analyst", State.READY))
+    _sync("--yes")
+    result = _purge("--yes")
+    assert result.exit_code == 0, result.output
+    assert fake.purged and fake.rows == {}
+    assert not data_dir.exists()
+    # What it cannot reach is said, not implied away.
+    assert "Time Travel" in result.output
+    assert "Pages deployments" in result.output
+
+
+def test_purge_stops_before_deleting_anything_if_the_hosted_copy_is_unreachable(
+    fake: FakeCompanion, data_dir: Any
+) -> None:
+    _board(("Example North", "Analyst", State.READY))
+    fake.gate = False
+    result = _purge("--yes")
+    assert result.exit_code == 1
+    assert "Nothing was deleted" in result.output
+    assert data_dir.exists()
+    assert not fake.purged
+
+
+def test_skip_hosted_purges_the_machine_anyway(fake: FakeCompanion, data_dir: Any) -> None:
+    _board(("Example North", "Analyst", State.READY))
+    fake.gate = False
+    result = _purge("--yes", "--skip-hosted")
+    assert result.exit_code == 0, result.output
+    assert not data_dir.exists()
+
+
+def test_purge_without_a_companion_is_local_only(
+    monkeypatch: pytest.MonkeyPatch, data_dir: Any
+) -> None:
+    for name in ENV:
+        monkeypatch.delenv(name, raising=False)
+    _board(("Example North", "Analyst", State.READY))
+    result = _purge("--yes")
+    assert result.exit_code == 0, result.output
+    assert "purging this machine only" in result.output
+    assert not data_dir.exists()
+
+
+def test_purge_without_yes_names_the_hosted_copy(fake: FakeCompanion) -> None:
+    result = _purge()
+    assert result.exit_code == 1
+    assert URL in result.output
+    assert not fake.purged

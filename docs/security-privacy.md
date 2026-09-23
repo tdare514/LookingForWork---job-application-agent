@@ -52,6 +52,9 @@ Written down rather than pretended away:
   companion carries real data (ADR 0010): company, title, status, dates and
   next action, never `notes` or `state_reason`. Behind Access and an
   owner-only session, but Cloudflare can read it, and it persists until purged.
+  `jobagent purge` empties it before the local dossier and verifies the tables
+  are empty, but cannot reach D1 Time Travel (restorable for 7 days on the free
+  plan), earlier Pages deployments, or Cloudflare's logs, and says so.
 
 ## PII inventory
 
