@@ -1,6 +1,6 @@
 # 0010 — A hosted tracker companion with owner-only writes
 
-**Status:** Proposed
+**Status:** Accepted
 **Date:** 2026-09-22
 **Supersedes:** the "Why not the alternatives" paragraph of [0009](0009-phone-snapshot.md) that rejected a D1 database, a sync endpoint and OAuth sessions. The rest of 0009 stands.
 

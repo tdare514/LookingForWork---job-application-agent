@@ -7,7 +7,7 @@ Two things live here:
   beside it. No build step, no API, no write route. Everything from *What it
   carries* to *Local check* below is about this.
 - **The hosted companion** ([ADR 0010](../docs/adr/0010-hosted-tracker-companion.md),
-  proposed): Pages Functions, a D1 database and owner-only writes. It is built
+  accepted): Pages Functions, a D1 database and owner-only writes. It is built
   and tested against synthetic data only. See *Companion* at the end.
 
 ## What it carries
@@ -58,7 +58,7 @@ is also what a failed fetch looks like.
 
 ## Companion
 
-Not for real data until ADR 0010 is accepted and its preconditions are met.
+Not for real data until ADR 0010's preconditions are met.
 
 ```sh
 cd cloudflare
