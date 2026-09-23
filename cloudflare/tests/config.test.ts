@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMITS, bodyTooLarge, clampLimit, readAccountConfig } from "../src/config.js";
+import { LIMITS, bodyTooLarge, clampLimit, readAccountConfig, readAuthConfig } from "../src/config.js";
 
 describe("free-tier limits", () => {
   it("keeps rows and request bodies explicitly bounded", () => {
@@ -32,5 +32,21 @@ describe("free-tier limits", () => {
     expect(bodyTooLarge("PUT", "-1")).toBe(true);
     expect(bodyTooLarge("PUT", String(LIMITS.maxBodyBytes + 1))).toBe(true);
     expect(bodyTooLarge("PUT", String(LIMITS.maxBodyBytes))).toBe(false);
+  });
+
+  it("requires explicit owner identity and a strong session secret", () => {
+    expect(readAuthConfig({})).toBeNull();
+    expect(readAuthConfig({
+      GITHUB_CLIENT_ID: "synthetic-client",
+      GITHUB_CALLBACK_URL: "https://example.invalid/auth/callback",
+      OWNER_GITHUB_ID: "not-numeric",
+      SESSION_SECRET: "short",
+    })).toBeNull();
+    expect(readAuthConfig({
+      GITHUB_CLIENT_ID: "synthetic-client",
+      GITHUB_CALLBACK_URL: "https://example.invalid/auth/callback",
+      OWNER_GITHUB_ID: "12345",
+      SESSION_SECRET: "12345678901234567890123456789012",
+    })?.ownerGithubId).toBe("12345");
   });
 });
