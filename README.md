@@ -40,6 +40,7 @@ day-by-day schedule and what was cut to fit the window.
 - [`docs/job-matching.md`](docs/job-matching.md) — discovery and scoring workflow
 - [`docs/application-tracking.md`](docs/application-tracking.md) — resume management and pipeline tracking
 - [`docs/adr/`](docs/adr/) — architecture decision records
+- [`cloudflare/README.md`](cloudflare/README.md) — the phone snapshot and the hosted companion
 
 ## Design principles
 

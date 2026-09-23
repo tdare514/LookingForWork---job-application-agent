@@ -1,0 +1,22 @@
+{
+  "name": "jobagent-cloudflare-companion",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Free-tier-safe Cloudflare Pages companion for jobagent",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler pages dev public",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "verify:free": "node scripts/verify-free-plan.mjs",
+    "deploy:dev": "node scripts/deploy-dev.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@cloudflare/workers-types": "^5.20260920.1",
+    "typescript": "^5.6.0",
+    "vitest": "^2.1.0",
+    "wrangler": "^4.0.0"
+  }
+}

@@ -15,3 +15,4 @@ that supersedes the old one.
 | [0007](0007-document-rendering-stack.md) | Document rendering stack | Accepted |
 | [0008](0008-fetching-is-viable-crawler-still-optional.md) | Fetching works; the crawler stays optional anyway | Proposed — supersedes 0005 |
 | [0009](0009-phone-snapshot.md) | A read-only phone snapshot, behind Cloudflare Access | Accepted — extends 0003 |
+| [0010](0010-hosted-tracker-companion.md) | A hosted tracker companion with owner-only writes | Accepted — amends 0009 |

@@ -34,6 +34,7 @@ Where judgement is needed: rule-based first, then Claude Code (already paid for)
 | `src/jobagent/cli/` | Typer entry point. Every command lives here. |
 | `tests/` | Mirrors `src/`. `conftest.py` isolates the data directory per test. |
 | `docs/adr/` | Decision records. Numbered, immutable once accepted, superseded rather than edited. |
+| `cloudflare/` | The phone view: `public/` (static page, ADR 0009) and the hosted companion (ADR 0010) — Pages Functions, D1 migrations, its own Node toolchain and tests. Nothing in `src/` imports it. |
 | `scripts/` | `pre-commit` hook, `check_context.py`, `capture_postings.py` (board rows as eval fixtures, stdout only). |
 
 ## One owner per fact
