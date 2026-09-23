@@ -39,6 +39,11 @@ class Destination(StrEnum):
     # nobody else. Cloudflare can read what is stored there, so this is a real
     # third party -- it is narrower than `NOWHERE`, not equivalent to it.
     PUBLIC_SNAPSHOT = "public_snapshot"
+    # The hosted tracker (ADR 0010): a Cloudflare D1 database behind Access and
+    # an owner-only session, written by `jobagent sync` and editable from the
+    # phone. Wider than the snapshot in one way that matters: it is a writable
+    # copy that persists until purged, not a file replaced on each upload.
+    HOSTED_TRACKER = "hosted_tracker"
 
 
 @dataclass(frozen=True)
@@ -92,10 +97,35 @@ REGISTRY: tuple[PIIField, ...] = (
         "state",
         "Where an application stands. With the company name this is the record "
         "of approaching employers while employed elsewhere. Leaves the machine "
-        "only in the phone snapshot, behind Cloudflare Access.",
+        "only for the phone snapshot and the hosted tracker, both behind "
+        "Cloudflare Access.",
         Sensitivity.HIGH,
-        (Destination.PUBLIC_SNAPSHOT,),
+        (Destination.PUBLIC_SNAPSHOT, Destination.HOSTED_TRACKER),
         RETENTION_UNTIL_DELETED,
+    ),
+    # The rest of what the phone shows. Registered so that ADR 0010's field list
+    # is the registry's to grant, not the TypeScript contract's to assume, and so
+    # `tests/test_cloudflare_contract.py` can hold the two to each other.
+    #
+    # MEDIUM rather than LOW: one of these alone is a public posting, but the set
+    # of them is the list of employers on the board. Paired with `state`, that is
+    # the record 0009 accepted as HIGH.
+    *(
+        PIIField(
+            "jobs",
+            column,
+            purpose,
+            Sensitivity.MEDIUM,
+            (Destination.PUBLIC_SNAPSHOT, Destination.HOSTED_TRACKER),
+            RETENTION_UNTIL_DELETED,
+        )
+        for column, purpose in (
+            ("company", "The employer. Across the board, the list of who is being considered."),
+            ("title", "The role, as the employer published it."),
+            ("location", "Where the role is, as the employer published it."),
+            ("url", "The posting's own address, for opening it from the phone."),
+            ("deadline", "When the posting closes. Drives the board's ordering."),
+        )
     ),
     PIIField(
         "jobs",
