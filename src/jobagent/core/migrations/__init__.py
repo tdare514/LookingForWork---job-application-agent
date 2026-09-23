@@ -202,4 +202,25 @@ M0004 = Migration(
 )
 
 
-MIGRATIONS: tuple[Migration, ...] = (M0001, M0002, M0003, M0004)
+M0005 = Migration(
+    5,
+    "companion_sync_state",
+    """
+    -- What `jobagent sync` last agreed with the hosted tracker (ADR 0010), one
+    -- row per board job it has sent. `remote_version` is the version to name on
+    -- the next write; `pushed_digest` is a hash of the fields as last agreed;
+    -- `agreed_status` is the status both sides held then. A phone edit to a
+    -- phone-only field moves the version but not the status, and only the
+    -- status says whether both sides changed the one thing that can conflict.
+    CREATE TABLE companion_sync (
+        job_id          INTEGER PRIMARY KEY,
+        remote_version  INTEGER NOT NULL,
+        pushed_digest   TEXT NOT NULL,
+        agreed_status   TEXT NOT NULL,
+        synced_at       TEXT NOT NULL
+    );
+    """,
+)
+
+
+MIGRATIONS: tuple[Migration, ...] = (M0001, M0002, M0003, M0004, M0005)

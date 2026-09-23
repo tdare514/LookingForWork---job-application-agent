@@ -225,6 +225,24 @@ REGISTRY: tuple[PIIField, ...] = (
         RETENTION_POSTINGS,
     ),
     PIIField(
+        "companion_sync",
+        "agreed_status",
+        "The status the board and the hosted tracker last agreed on, per job. A "
+        "copy of `jobs.state` kept only to detect conflicting edits.",
+        Sensitivity.HIGH,
+        (Destination.NOWHERE,),
+        RETENTION_UNTIL_DELETED,
+    ),
+    PIIField(
+        "companion_sync",
+        "synced_at",
+        "When each board row was last agreed with the hosted tracker. Keyed by "
+        "job, so it is a dated list of which employers were on the board.",
+        Sensitivity.HIGH,
+        (Destination.NOWHERE,),
+        RETENTION_UNTIL_DELETED,
+    ),
+    PIIField(
         "scores",
         "filter_reason",
         "Why a role was cut. Quotes the profile back -- the compensation floor, "
