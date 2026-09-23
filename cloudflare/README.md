@@ -117,6 +117,23 @@ Not built yet: the local sync client (nothing in `src/jobagent/` calls these
 routes), edit controls on the page, and a `purge` that reaches D1. ADR 0010
 lists these as preconditions for real data.
 
+### Laptop sync and purge
+
+`/api/sync` and `/api/purge` are for `jobagent sync` and `jobagent purge`, not
+the page. They take `Authorization: Bearer <SYNC_TOKEN>` and nothing else: a
+browser session is refused there, and the token opens no other route.
+
+- `GET /api/sync?after=<id>` — every row a page of 50 at a time, including the
+  phone-only `nextAction` fields; `next` is the cursor, null on the last page.
+- `POST /api/sync` — `applications` to write (versions returned), and `remove`,
+  ids the laptop no longer has. A conflict writes and removes nothing.
+- `POST /api/purge` — deletes every row in `jobs`, `owner_sessions` and
+  `oauth_states`, then counts what is left and says whether it is clean.
+
+Set `SYNC_TOKEN` as a secret (at least 32 characters). Without it these routes
+answer 503. The laptop also needs a Cloudflare Access **service token** to get
+past the gate: add a Service Auth policy for it on the Access application.
+
 ### Synthetic dev deployment
 
 Separate from local development, and fail-closed. It needs a Cloudflare API

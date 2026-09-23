@@ -42,7 +42,10 @@ export async function updateJob(
   return { outcome: "updated", row: current };
 }
 
-export type SyncResult = { accepted: string[]; conflicts: { id: string; version: number | undefined }[] };
+export type SyncResult = {
+  accepted: { id: string; version: number }[];
+  conflicts: { id: string; version: number | undefined }[];
+};
 
 // A row the server has never seen is inserted at version 1. A row it has seen
 // is written only if the client names the version it currently holds. Stale
@@ -85,11 +88,66 @@ export async function syncJobs(db: D1Database, rows: SyncApplication[], now: str
   const results = await db.batch(statements);
   // A write that raced this batch leaves its row unchanged here; say so rather
   // than reporting it accepted.
-  const accepted: string[] = [];
+  const written: string[] = [];
   const conflicts: SyncResult["conflicts"] = [];
   rows.forEach((row, index) => {
-    if (results[index]?.meta.changes) accepted.push(row.id);
+    if (results[index]?.meta.changes) written.push(row.id);
     else conflicts.push({ id: row.id, version: undefined });
   });
-  return { accepted, conflicts };
+  // The laptop needs the new versions to make its next write.
+  const versions = await versionsOf(db, written);
+  return { accepted: written.map((id) => ({ id, version: versions.get(id) ?? 0 })), conflicts };
+}
+
+async function versionsOf(db: D1Database, ids: string[]): Promise<Map<string, number>> {
+  if (!ids.length) return new Map();
+  const result = await db
+    .prepare(`SELECT id, version FROM jobs WHERE id IN (${ids.map(() => "?").join(", ")})`)
+    .bind(...ids)
+    .all<{ id: string; version: number }>();
+  return new Map(result.results.map((row) => [row.id, row.version]));
+}
+
+// Every row, in id order, a page at a time: the laptop's view of the phone's edits.
+export async function pageForSync(
+  db: D1Database,
+  after: string,
+  limit: number,
+): Promise<SyncApplication[]> {
+  const result = await db
+    .prepare(
+      `SELECT id, company, title, location, url, deadline, status,
+        next_action AS nextAction, next_action_date AS nextActionDate, version
+       FROM jobs WHERE id > ? ORDER BY id LIMIT ?`,
+    )
+    .bind(after, limit)
+    .all<SyncApplication>();
+  return result.results;
+}
+
+export async function removeJobs(db: D1Database, ids: string[]): Promise<number> {
+  if (!ids.length) return 0;
+  const result = await db
+    .prepare(`DELETE FROM jobs WHERE id IN (${ids.map(() => "?").join(", ")})`)
+    .bind(...ids)
+    .run();
+  return result.meta.changes;
+}
+
+// Everything the companion holds about the owner. Returns what is left after,
+// so the caller can verify rather than assume.
+export const PURGED_TABLES = ["jobs", "owner_sessions", "oauth_states"] as const;
+
+export async function purgeAll(
+  db: D1Database,
+): Promise<{ removed: Record<string, number>; remaining: Record<string, number> }> {
+  const results = await db.batch(PURGED_TABLES.map((table) => db.prepare(`DELETE FROM ${table}`)));
+  const removed: Record<string, number> = {};
+  const remaining: Record<string, number> = {};
+  for (const [index, table] of PURGED_TABLES.entries()) {
+    removed[table] = results[index]?.meta.changes ?? 0;
+    const left = await db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).first<{ n: number }>();
+    remaining[table] = left?.n ?? 0;
+  }
+  return { removed, remaining };
 }

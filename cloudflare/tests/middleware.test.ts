@@ -4,6 +4,7 @@ import { TestD1 } from "./d1.js";
 
 const ORIGIN = "https://companion.example.invalid";
 const FREE = { FREE_TIER_ENABLED: "true", ACCOUNT_PLAN: "free", DAILY_REQUEST_QUOTA: "1000" };
+const TOKEN = "synthetic-sync-token-0123456789abcdef";
 let d1: TestD1;
 let client = 0;
 
@@ -75,5 +76,34 @@ describe("api gate", () => {
     expect((await write({ ...session("live", "t"), origin: ORIGIN, "x-csrf-token": "other" })).status).toBe(403);
     expect((await write({ ...session("live"), origin: ORIGIN, "x-csrf-token": "" })).status).toBe(403);
     expect(await (await write({ ...session("live", "t"), origin: ORIGIN, "x-csrf-token": "t" })).text()).toBe("reached");
+  });
+});
+
+describe("machine routes", () => {
+  const withToken = { ...FREE, SYNC_TOKEN: TOKEN };
+
+  it("answer 503 until a sync token is configured", async () => {
+    expect((await call("/api/sync", { headers: { authorization: `Bearer ${TOKEN}` } })).status).toBe(503);
+  });
+
+  it("admit the bearer token and nothing else", async () => {
+    addSession("live");
+    expect((await call("/api/sync", { env: withToken })).status).toBe(401);
+    expect((await call("/api/sync", { env: withToken, headers: { authorization: "Bearer wrong" } })).status).toBe(401);
+    expect((await call("/api/sync", { env: withToken, headers: { authorization: TOKEN } })).status).toBe(401);
+    // A browser session is not a sync credential.
+    expect((await call("/api/purge", { method: "POST", env: withToken, headers: { ...session("live", "t"), origin: ORIGIN, "x-csrf-token": "t", "content-length": "0" } })).status).toBe(401);
+    const ok = await call("/api/sync", { env: withToken, headers: { authorization: `Bearer ${TOKEN}` } });
+    expect(await ok.text()).toBe("reached");
+  });
+
+  it("still apply the size limit to a token-bearing write", async () => {
+    const headers = { authorization: `Bearer ${TOKEN}` };
+    expect((await call("/api/purge", { method: "POST", env: withToken, headers })).status).toBe(413);
+    expect(await (await call("/api/purge", { method: "POST", env: withToken, headers: { ...headers, "content-length": "0" } })).text()).toBe("reached");
+  });
+
+  it("do not let the token open the page's routes", async () => {
+    expect((await call("/api/jobs", { env: withToken, headers: { authorization: `Bearer ${TOKEN}` } })).status).toBe(401);
   });
 });
