@@ -94,3 +94,4 @@ select {
 @media (min-width: 42rem) {
   .application-list { grid-template-columns: repeat(2, 1fr); }
 }
+.next-action { color: #53616d; font-size: .9rem; margin: 0 0 .5rem; }

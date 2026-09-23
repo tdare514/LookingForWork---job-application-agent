@@ -28,6 +28,7 @@ The controls below are sized for that, not for a hobby script.
 | Third-party exposure | PII sent to model or job-site APIs | Minimization at the LLM boundary; per-call purpose logging; no compensation or immigration data in prompts unless the task requires it |
 | Supply chain | Malicious dependency reading the data directory | Pinned dependencies with hashes; dependency audit in CI; minimal dependency surface |
 | Snapshot exposure | Phone snapshot readable by anyone who finds the Pages URL | Cloudflare Access login in front of the project; allowlisted fields only (ADR 0009); `snapshot.json` gitignored and refused by the pre-commit hook |
+| Hosted tracker write path (ADR 0010) | A forged or stale write to the D1 copy, or a critical field gaining an off-machine copy | Access, then an owner-only GitHub session, then same-origin CSRF on writes; optimistic versions, stale writes refused; field allowlist enforced on write and checked against the registry by `tests/test_cloudflare_contract.py`. Synthetic data only until 0010's preconditions are met |
 | Unauthorized outbound action | Agent submits an application the user never saw | Structural approval gate; audit log; no submission code path without a recorded approval |
 | Account lockout or ToS action | Aggressive automation against a job site | Central rate limiting; identifiable user agent; per-source terms compliance |
 
@@ -47,6 +48,10 @@ Written down rather than pretended away:
   what is stored there, and the login is the only thing between that file and
   anyone else. `jobs.state` was downgraded from critical to permit this; the
   risk was accepted, not reassessed.
+- Cloudflare will hold a writable copy of tracker rows in D1 once the hosted
+  companion carries real data (ADR 0010): company, title, status, dates and
+  next action, never `notes` or `state_reason`. Behind Access and an
+  owner-only session, but Cloudflare can read it, and it persists until purged.
 
 ## PII inventory
 
