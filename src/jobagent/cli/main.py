@@ -1197,5 +1197,108 @@ def snapshot(
     )
 
 
+@app.command("sync")
+def sync_cmd(
+    yes: bool = typer.Option(
+        False, "--yes", help="Send. Without it, show the plan and send nothing."
+    ),
+    check: bool = typer.Option(False, "--check", help="Only confirm the Access gate is on."),
+) -> None:
+    """Reconcile the board with the hosted tracker (ADR 0010). Never runs unattended.
+
+    Sends only the fields in `jobagent.companion.contract`, and takes back only
+    status changes made on the phone. Refuses outright if the companion answers
+    without a Cloudflare Access login. Not part of `daily`, on purpose.
+    """
+    from jobagent.companion import client as companion
+    from jobagent.companion.contract import FROM_BOARD, HOSTED_ONLY
+    from jobagent.companion.state import SyncStateRepo
+    from jobagent.companion.sync import plan as plan_sync
+    from jobagent.companion.sync import run as run_sync
+
+    config = _companion_config_or_exit(companion)
+    try:
+        with companion.connect(config) as client:
+            client.check_gate()
+            console.print(f"[green]Access gate is on[/green] for {config.url}.")
+            if check:
+                return
+            hosted = client.pull()
+            with Storage() as store:
+                repo, state = BoardRepo(store), SyncStateRepo(store)
+                jobs = repo.all()
+                the_plan = plan_sync(jobs, hosted, state.all())
+                names = {job.id: f"{job.company} — {job.title}" for job in jobs}
+
+                console.print(
+                    f"To send: {len(the_plan.pushes)} row(s), carrying only "
+                    f"{', '.join([*FROM_BOARD, *HOSTED_ONLY])}. "
+                    f"To remove: {len(the_plan.removals)}. From the phone: {len(the_plan.pulls)}."
+                )
+                for pull in the_plan.pulls:
+                    job = repo.get(pull.job_id)
+                    console.print(
+                        f"  ← {names.get(pull.job_id)}: {job.state if job else '?'} → {pull.status}"
+                    )
+                for conflict in the_plan.conflicts:
+                    console.print(
+                        f"  [yellow]conflict[/yellow] {names.get(conflict.job_id)}: board says "
+                        f"{conflict.board_status}, phone says {conflict.hosted_status}. Left alone."
+                    )
+                if not yes:
+                    console.print("Dry run: nothing sent. Re-run with [bold]--yes[/bold] to send.")
+                    return
+                if the_plan.empty:
+                    console.print("Already in agreement.")
+                    if the_plan.conflicts:
+                        raise typer.Exit(code=1)
+                    return
+
+                outcome = run_sync(
+                    client,
+                    the_plan,
+                    set_state=lambda job_id, new_state: repo.set_state(job_id, new_state),
+                    record=state.record,
+                    forget=state.forget,
+                )
+                # Counts only: a company name in the audit detail is the thing
+                # most likely to be pasted somewhere while debugging.
+                store.append_audit(
+                    "companion.sync",
+                    {
+                        "pushed": outcome.pushed,
+                        "pulled": outcome.pulled,
+                        "removed": outcome.removed,
+                        "conflicts": len(outcome.conflicts),
+                    },
+                )
+    except (companion.AccessGateOff, companion.CompanionError) as exc:
+        console.print(f"[red]Not synced:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+
+    console.print(
+        f"[green]Synced.[/green] Sent {outcome.pushed}, took {outcome.pulled} from the phone, "
+        f"removed {outcome.removed}."
+    )
+    if outcome.conflicts:
+        console.print(f"[yellow]{len(outcome.conflicts)} conflict(s) left for you.[/yellow]")
+        raise typer.Exit(code=1)
+
+
+def _companion_config_or_exit(companion: Any) -> Any:
+    try:
+        config = companion.CompanionConfig.from_env()
+    except companion.CompanionNotConfigured as exc:
+        console.print(f"[red]Companion half-configured:[/red] {exc}")
+        raise typer.Exit(code=1) from exc
+    if config is None:
+        console.print(
+            "No hosted companion configured. Set JOBAGENT_COMPANION_URL, JOBAGENT_SYNC_TOKEN, "
+            "JOBAGENT_ACCESS_CLIENT_ID and JOBAGENT_ACCESS_CLIENT_SECRET (cloudflare/README.md)."
+        )
+        raise typer.Exit(code=1)
+    return config
+
+
 if __name__ == "__main__":
     app()

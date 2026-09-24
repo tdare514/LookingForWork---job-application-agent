@@ -134,6 +134,22 @@ Set `SYNC_TOKEN` as a secret (at least 32 characters). Without it these routes
 answer 503. The laptop also needs a Cloudflare Access **service token** to get
 past the gate: add a Service Auth policy for it on the Access application.
 
+On the laptop, from the environment (never a file):
+
+```sh
+export JOBAGENT_COMPANION_URL=https://<project>.pages.dev
+export JOBAGENT_SYNC_TOKEN=...                 # the same value as SYNC_TOKEN
+export JOBAGENT_ACCESS_CLIENT_ID=... JOBAGENT_ACCESS_CLIENT_SECRET=...
+jobagent sync --check   # is the gate on? anonymous must get the Access login
+jobagent sync           # dry run: what would go, what would come back
+jobagent sync --yes     # do it
+```
+
+`jobagent sync` sends only the fields in `jobagent.companion.contract`, takes
+back only a status changed on the phone, and reports a row whose status changed
+on both sides as a conflict without touching either. It is never part of
+`daily`.
+
 ### Synthetic dev deployment
 
 Separate from local development, and fail-closed. It needs a Cloudflare API
