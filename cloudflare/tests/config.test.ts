@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LIMITS, bodyTooLarge, clampLimit, readAccountConfig, readAuthConfig } from "../src/config.js";
+import { LIMITS, bodyTooLarge, clampLimit, readAccountConfig, readAuthConfig, readSyncToken } from "../src/config.js";
 
 describe("free-tier limits", () => {
   it("keeps rows and request bodies explicitly bounded", () => {
@@ -48,5 +48,11 @@ describe("free-tier limits", () => {
       OWNER_GITHUB_ID: "12345",
       SESSION_SECRET: "12345678901234567890123456789012",
     })?.ownerGithubId).toBe("12345");
+  });
+
+  it("refuses a missing or short sync token", () => {
+    expect(readSyncToken({})).toBeNull();
+    expect(readSyncToken({ SYNC_TOKEN: "short" })).toBeNull();
+    expect(readSyncToken({ SYNC_TOKEN: "x".repeat(32) })).toBe("x".repeat(32));
   });
 });

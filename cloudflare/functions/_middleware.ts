@@ -1,9 +1,19 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
-import { parseCookies } from "../src/auth.js";
-import { bodyTooLarge, LIMITS, readAccountConfig } from "../src/config.js";
+import { parseCookies, sameSecret } from "../src/auth.js";
+import { bodyTooLarge, LIMITS, readAccountConfig, readSyncToken } from "../src/config.js";
 import { withSecurityHeaders } from "../src/security.js";
 
-type Env = { DB: D1Database; FREE_TIER_ENABLED?: string; ACCOUNT_PLAN?: string; DAILY_REQUEST_QUOTA?: string };
+type Env = {
+  DB: D1Database;
+  FREE_TIER_ENABLED?: string;
+  ACCOUNT_PLAN?: string;
+  DAILY_REQUEST_QUOTA?: string;
+  SYNC_TOKEN?: string;
+};
+
+// Reached by `jobagent sync` and `jobagent purge`, never by the page. They take
+// the bearer token and nothing else: no session, and so no CSRF exposure.
+const MACHINE_ROUTES = new Set(["/api/sync", "/api/purge"]);
 
 // Per-isolate counters. Cloudflare runs many isolates and recycles them, so this
 // is a brake on a runaway client, not a distributed quota.
@@ -60,6 +70,14 @@ export const onRequest: PagesFunction<Env> = async (context) => {
   }
   if (rateLimited(context.request, Date.now(), account.dailyRequestQuota)) {
     return refuse(429, "rate limit exceeded");
+  }
+  if (MACHINE_ROUTES.has(pathname)) {
+    const expected = readSyncToken(context.env as unknown as Record<string, string | undefined>);
+    if (expected === null) return refuse(503, "sync unavailable");
+    const header = context.request.headers.get("authorization") ?? "";
+    const given = header.startsWith("Bearer ") ? header.slice("Bearer ".length) : "";
+    if (!given || !(await sameSecret(given, expected))) return refuse(401, "access denied");
+    return withSecurityHeaders(await context.next());
   }
   // Login and logout are limited above but cannot require the session they create or end.
   if (pathname.startsWith("/api/auth/")) return withSecurityHeaders(await context.next());

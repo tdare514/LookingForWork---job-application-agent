@@ -45,6 +45,14 @@ export function readAuthConfig(env: Record<string, string | undefined>): AuthCon
   };
 }
 
+// The laptop's credential for /api/sync and /api/purge. A browser session is
+// the wrong shape for a CLI, so the machine routes take this bearer token
+// instead, and nothing else does.
+export function readSyncToken(env: Record<string, string | undefined>): string | null {
+  const token = env.SYNC_TOKEN;
+  return token && token.length >= 32 ? token : null;
+}
+
 export function clampLimit(value: string | null): number {
   const parsed = Number.parseInt(value ?? "", 10);
   if (!Number.isFinite(parsed) || parsed < 1) return LIMITS.maxRows;

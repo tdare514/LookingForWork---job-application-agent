@@ -9,6 +9,7 @@ function optionalText(value: unknown, max = MAX_TEXT): string | null {
   return typeof value === "string" && value.length <= max ? value : null;
 }
 
+// A board row with no posting URL still syncs; the page shows no link for it.
 export function parseSyncBody(value: unknown): { applications: SyncApplication[] } | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null;
   const body = value as { applications?: unknown };
@@ -23,7 +24,8 @@ export function parseSyncBody(value: unknown): { applications: SyncApplication[]
       typeof record.company !== "string" || record.company.length === 0 || record.company.length > MAX_TEXT ||
       typeof record.title !== "string" || record.title.length === 0 || record.title.length > MAX_TEXT ||
       typeof record.location !== "string" || record.location.length > MAX_TEXT ||
-      typeof record.url !== "string" || record.url.length > MAX_URL || !/^https?:\/\//i.test(record.url) ||
+      typeof record.url !== "string" || record.url.length > MAX_URL ||
+      (record.url !== "" && !/^https?:\/\//i.test(record.url)) ||
       typeof record.status !== "string" || !isApplicationStatus(record.status) ||
       !Number.isInteger(record.version) || typeof record.version !== "number" || record.version < 0
     ) return null;
@@ -47,4 +49,13 @@ export function parseSyncBody(value: unknown): { applications: SyncApplication[]
     });
   }
   return { applications };
+}
+
+// Ids the laptop no longer has on the board. The laptop is the source of truth
+// for which rows exist, so these are removed without a version check.
+export function parseRemovals(value: unknown): string[] | null {
+  if (value === undefined) return [];
+  if (!Array.isArray(value) || value.length > LIMITS.maxRows) return null;
+  if (!value.every((id) => typeof id === "string" && id.length > 0 && id.length <= 100)) return null;
+  return value as string[];
 }
