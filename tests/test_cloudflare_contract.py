@@ -10,7 +10,8 @@ import re
 import sqlite3
 from pathlib import Path
 
-from jobagent.core.pii import Sensitivity, by_table
+from jobagent.companion.contract import FROM_BOARD, HOSTED_ONLY, IDENTIFIERS, PULLED_BACK
+from jobagent.core.pii import REGISTRY, Destination, Sensitivity, by_table
 from jobagent.tracking.board import State
 from jobagent.tracking.snapshot import NEVER_SNAPSHOT
 
@@ -54,3 +55,17 @@ def test_hosted_table_holds_nothing_critical_or_refused() -> None:
     assert "status" in columns  # the check is looking at the real table
     assert columns.isdisjoint(CRITICAL_JOB_COLUMNS)
     assert columns.isdisjoint(NEVER_SNAPSHOT)
+
+
+def test_every_hosted_field_is_accounted_for() -> None:
+    """A field added to the TypeScript contract must be placed here, or this fails."""
+    sync_fields = set(_ts_array("SYNC_FIELDS"))
+    assert sync_fields == set(FROM_BOARD) | set(HOSTED_ONLY) | set(IDENTIFIERS)
+    assert set(PULLED_BACK) <= set(FROM_BOARD)
+
+
+def test_the_registry_grants_exactly_what_the_contract_carries() -> None:
+    granted = {
+        (f.table, f.column) for f in REGISTRY if Destination.HOSTED_TRACKER in f.destinations
+    }
+    assert granted == {("jobs", column) for column in FROM_BOARD.values()}
