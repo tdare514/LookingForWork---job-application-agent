@@ -62,36 +62,41 @@ done
 
 # Append to the log file with timestamp.
 # Redirect both stdout and stderr to the log.
+# The exit code is captured inside the block: a `{ ...; }` group's status is its
+# last command's, which would be the "completed" echo and always 0. Braces run in
+# this shell, so the variable survives the block.
+DAILY_EXIT_CODE=0
 {
     echo "=== jobagent daily run at $(date -u) ==="
-    python3 -m jobagent daily "${DAILY_ARGS[@]}"
-    echo "=== completed at $(date -u) ==="
+    python3 -m jobagent daily "${DAILY_ARGS[@]}" || DAILY_EXIT_CODE=$?
+    echo "=== completed at $(date -u) with exit code $DAILY_EXIT_CODE ==="
 } >> "$LOG_FILE" 2>&1
-
-DAILY_EXIT_CODE=$?
 
 # Post a notification if enabled (default: on).
 # The notification carries counts only, never company names or job titles.
 # Lock-screen visibility of employer names is the most sensitive data this tool holds.
 if [[ "${JOBAGENT_NOTIFY:-1}" != "0" ]]; then
     if [[ $DAILY_EXIT_CODE -eq 0 ]]; then
-        # Success: get the count of new postings from digest --no-record.
-        # We parse JSON to extract the length of the "new" list.
+        # Count from digest --no-record: --no-record matters, or this read would
+        # mark the queue as seen (#98). "New" means since the owner last ran
+        # `jobagent digest`, not since today, so the text says that. A digest that
+        # can't be read is reported as such rather than as a quiet day.
         NEW_COUNT=$(python3 -m jobagent digest --json --no-record 2>/dev/null | python3 -c "
 import sys, json
 try:
-    data = json.load(sys.stdin)
-    print(len(data.get('new', [])))
-except (json.JSONDecodeError, KeyError, ValueError):
-    print(0)
+    print(len(json.load(sys.stdin)['new']))
+except Exception:
+    print('?')
 ")
 
-        if [[ "$NEW_COUNT" -eq 0 ]]; then
-            NOTIFICATION_TEXT="Nothing new today"
+        if [[ "$NEW_COUNT" == "?" || -z "$NEW_COUNT" ]]; then
+            NOTIFICATION_TEXT="Daily run finished, but the digest couldn't be read — see jobagent-daily.log"
+        elif [[ "$NEW_COUNT" -eq 0 ]]; then
+            NOTIFICATION_TEXT="Nothing new since you last looked"
         elif [[ "$NEW_COUNT" -eq 1 ]]; then
-            NOTIFICATION_TEXT="1 new posting today"
+            NOTIFICATION_TEXT="1 new posting since you last looked"
         else
-            NOTIFICATION_TEXT="$NEW_COUNT new postings today"
+            NOTIFICATION_TEXT="$NEW_COUNT new postings since you last looked"
         fi
     else
         # Failure: daily exited with an error.
