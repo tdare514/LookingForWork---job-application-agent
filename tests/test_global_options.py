@@ -30,8 +30,10 @@ def test_data_dir_flag_sets_environment_variable(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """--data-dir <path> init creates the directory at that path, not the default."""
-    # Clear the env var so we control it completely
-    monkeypatch.delenv("JOBAGENT_DATA_DIR", raising=False)
+    # Set, not deleted: the callback writes os.environ directly, and monkeypatch
+    # only restores a variable it has recorded. delenv on an unset name records
+    # nothing, so the flag's value would leak into every later test.
+    monkeypatch.setenv("JOBAGENT_DATA_DIR", str(tmp_path / "not-this-one"))
 
     target_dir = tmp_path / "custom_data"
     runner = CliRunner()
@@ -42,14 +44,14 @@ def test_data_dir_flag_sets_environment_variable(
     assert target_dir.exists()
     # The database file should exist to prove init ran
     assert (target_dir / "jobagent.db").exists()
+    assert not (tmp_path / "not-this-one").exists()
 
 
 def test_data_dir_inside_repository_is_refused(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """--data-dir pointing inside a .git repository is refused with exit code 2."""
-    # Clear the env var
-    monkeypatch.delenv("JOBAGENT_DATA_DIR", raising=False)
+    monkeypatch.setenv("JOBAGENT_DATA_DIR", str(tmp_path / "not-this-one"))
 
     # Create a fake repository structure in tmp_path
     fake_repo = tmp_path / "fake_repo"
