@@ -2,7 +2,7 @@
 
 Snapshot of **now**, not a changelog. Update it in the same commit as the change that made it stale. Keep it under ~60 lines; git history holds the rest.
 
-Last updated: 2026-09-16
+Last updated: 2026-09-25
 
 Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, digest. Everything left before the 20th is mine: the company paragraph and the "why this company" answer for the two nearest-deadline applications.
 
@@ -16,9 +16,9 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 - Truthfulness check: a tailored bullet must cite a source accomplishment and may not invent a number, claim more scope than was held, or add breadth. Refuses rather than warns.
 - The board closes the loop: `d` drafts the package for a row, `c` stages the Claude in Chrome prompt pointing at the drafted resume, `a` marks it applied. A `Pkg` column shows which rows have one.
 - Tailoring (`jobagent draft <job-id>`): selects and orders bullets for one posting, renders a one-page resume to PDF and DOCX, drafts a cover letter, and writes the recurring answers. Bullets are selected verbatim, so selection cannot fabricate.
-- 411 tests pass, none skipped. Missing pursue, borderline or skip ranking tiers fail the suite (#76). `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
+- 454 tests pass, none skipped. Missing pursue, borderline or skip ranking tiers fail the suite (#76). `make check` runs ruff, strict mypy, pytest and the context check. CI runs the same on push.
 - `jobagent followups` — fires at 10 days submitted with no reply, 5 days post-interview, stale at 30. The board shows the count.
-- `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Sources: `workday:rbc`, `workday:bmo`, `workday:td`, `greenhouse:<board>`, or `all` (Workday only).
+- `jobagent fetch <source>` — pulls postings onto the board through a rate-limited client with a host allowlist. Sources: `workday:rbc`, `workday:bmo`, `workday:td`, `greenhouse:<board>` (with `--company`; descriptions come in the list call), or `all` (Workday only).
 - Canonical normalization and de-duplication (#28): one job, many sightings. The same role from two sources collapses; a repost attaches as a sighting rather than a new row; two levels of one title stay separate. Company aliases (`Bank of Montreal` = `BMO`), city-level locations, and a seniority ladder independent of title inflation.
 - `jobagent fetch <source> --details` — pulls each posting's description and **closing date** from the source's own posting page. Deadlines fill `jobs.deadline` only when empty, so a date typed in by hand always wins.
 - `jobagent extract` — rule-based requirements from posting text (#30): required vs preferred skills, years, compensation, work arrangement, and the closing date. Evaluated against 12 hand-labelled real postings with per-field precision and recall enforced in CI.
@@ -26,13 +26,13 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 - `jobagent report` — funnel with denominators stated, small samples flagged, and a plain "nothing submitted yet" when that is the truth.
 - `jobagent export` / `purge` — one archive out, and a delete that verifies nothing recoverable remains.
 - `jobagent score` — hard filters then a decomposed score, both stored per job. Filters cut for a stated reason (`--filtered` lists them); absence never cuts, so a posting silent on pay, sponsorship or level is judged, not dropped. `--explain <id>` prints the five components with the weight each carried and a line on what it looked at. A component with nothing to judge on is dropped and the remaining weights rescale, so a row with no description still ranks.
-- `jobagent shortlist` / `digest` / `daily` — the reading queue (#32). The digest is four capped sections: new since you last looked, roles whose score moved and which component moved it, reposts with their sighting count, and what the filters cut aggregated by rule. `daily` chains fetch → extract → score → digest unattended and is safe for cron; it fetches only sources named explicitly. Both take `--json`.
+- `jobagent shortlist` / `digest` / `daily` — the reading queue (#32). The digest is four capped sections: new since you last looked, roles whose score moved and which component moved it, reposts with their sighting count, and what the filters cut aggregated by rule. `daily` chains fetch → extract → score → digest unattended and never marks the digest read; it fetches only sources named explicitly. `scripts/launchd/` schedules it, with a counts-only Mac notification (`docs/scheduling.md`). Both take `--json`.
 - `jobagent skip <id> -r "..."` / `snooze <id> --days N` — a skip records why, and `report` aggregates the reasons. A snooze hides a row until a date and it returns on its own; it is not a state, so nothing has to be undone.
 - Pre-commit hook blocks databases, rendered documents, snapshots and credential shapes. Verified firing on a fake key and on a real `snapshot.json`.
 
 ## In progress
 
-- **ADR 0008 is `Proposed` and waiting on me.** It supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. ADR 0009 is accepted: the phone snapshot (`jobagent snapshot`, `cloudflare/public/`) downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login. **No Cloudflare project exists and nothing has been uploaded**; the Access gate must be configured and verified before it is — `cloudflare/README.md` has the order. ADR 0010 is accepted: a hosted companion under `cloudflare/` with owner-only writes (Pages Functions, D1, GitHub OAuth), built and tested on synthetic data only. `jobagent sync` reconciles the board with it by hand only (a dry run unless `--yes`; refuses if the Access gate answers anonymously), and the registry now grants each hosted field. `jobagent purge` empties the hosted copy first and names what it cannot reach (D1 Time Travel, old Pages deployments). The code side of 0010 is done; **no Cloudflare project exists yet**, and setting one up behind Access is mine.
+- **ADR 0008 is `Proposed` and waiting on me.** It supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. ADR 0009 is accepted: the phone snapshot (`jobagent snapshot`, `cloudflare/public/`) downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login. ADR 0010 is accepted: a hosted companion under `cloudflare/` with owner-only writes (Pages Functions, D1, GitHub OAuth), built and tested on synthetic data only. `jobagent sync` reconciles the board with it by hand only (a dry run unless `--yes`; refuses if the Access gate answers anonymously), and the registry now grants each hosted field. `jobagent purge` empties the hosted copy first and names what it cannot reach (D1 Time Travel, old Pages deployments). The Pages project is deployed behind Access, and its D1 database is created, bound and migrated. Still mine: the Access service token, `SYNC_TOKEN`, the laptop's `JOBAGENT_*` variables, and the first `jobagent sync`.
 
 ## Next
 
@@ -51,7 +51,7 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 - Domain relevance compares title vocabulary against the profile's target titles, not industry history. There is no industry field on the profile to read.
 - Extraction is evaluated on 12 postings, not the 50 #30 asks for, and only on its mechanical fields (date, pay band, years, arrangement). Skill extraction is unscored.
 - **Growing either eval corpus needs a machine with network access.** A build container's proxy refuses every job-board host at the CONNECT stage, before a request is made, so it is not a tenant declining and no adapter change helps. `scripts/capture_postings.py` is the path: fetch on a machine that can reach them, then print board rows as fixtures to stdout. It writes nothing and emits only employer-published fields.
-- `--json` exists on `shortlist` and `digest` only; every other command prints a Rich table and composes with nothing. There are still no global flags (`--config`, `--data-dir`, `--verbose`), and the data directory is settable only through `JOBAGENT_DATA_DIR`. #26 is the rest of that surface.
+- `--json` exists on `shortlist`, `digest` and `list` only; every other command prints a Rich table and composes with nothing. There are still no global flags (`--config`, `--data-dir`, `--verbose`), and the data directory is settable only through `JOBAGENT_DATA_DIR`. #26 is the rest of that surface.
 - Mail ingestion is deferred (#39) — OAuth costs a day and manual status updates take seconds at this volume.
 - Commit signing is configured in the build container but its key is empty, so no commit carries a signature and none will show GitHub's Verified badge. Authorship is correct; verification needs a real signing key set up locally.
 

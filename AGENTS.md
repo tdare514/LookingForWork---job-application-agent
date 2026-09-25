@@ -36,7 +36,7 @@ Where judgement is needed: rule-based first, then Claude Code (already paid for)
 | `tests/` | Mirrors `src/`. `conftest.py` isolates the data directory per test. |
 | `docs/adr/` | Decision records. Numbered, immutable once accepted, superseded rather than edited. |
 | `cloudflare/` | The phone view: `public/` (static page, ADR 0009) and the hosted companion (ADR 0010) — Pages Functions, D1 migrations, its own Node toolchain and tests. Nothing in `src/` imports it. |
-| `scripts/` | `pre-commit` hook, `check_context.py`, `capture_postings.py` (board rows as eval fixtures, stdout only). |
+| `scripts/` | `pre-commit` hook, `check_context.py`, `capture_postings.py` (board rows as eval fixtures, stdout only), `launchd/` (the scheduled `daily` run; installed by hand). |
 
 ## One owner per fact
 
@@ -55,6 +55,7 @@ A fact lives in exactly one place; everything else links to it. Fix duplication 
 | Commands, working rules, definition of done | this file |
 | Claude Code specifics | `CLAUDE.md`, `.claude/` |
 | Branch, commit, PR workflow | `CONTRIBUTING.md` |
+| Running `daily` on a schedule | `docs/scheduling.md` |
 | Schedule and scope cuts | `ROADMAP.md` |
 
 There is no changelog. Git history and merged PRs are the record.
