@@ -42,14 +42,27 @@ fi
 
 LOG_FILE="$DATA_DIR/jobagent-daily.log"
 
+# Build the --source arguments from JOBAGENT_DAILY_SOURCES.
+# If unset or empty, default to the standard Workday tenants.
+if [[ -n "$JOBAGENT_DAILY_SOURCES" ]]; then
+    # Split the space-separated source list into an array, preserving quotes.
+    read -ra SOURCES <<<"$JOBAGENT_DAILY_SOURCES"
+else
+    # Default sources: RBC, BMO, and TD Workday tenants
+    SOURCES=("workday:rbc" "workday:bmo" "workday:td")
+fi
+
+# Build the --source arguments array
+DAILY_ARGS=()
+for source in "${SOURCES[@]}"; do
+    DAILY_ARGS+=(--source "$source")
+done
+
 # Append to the log file with timestamp.
 # Redirect both stdout and stderr to the log.
 {
     echo "=== jobagent daily run at $(date -u) ==="
-    python3 -m jobagent daily \
-        --source workday:rbc \
-        --source workday:bmo \
-        --source workday:td
+    python3 -m jobagent daily "${DAILY_ARGS[@]}"
     echo "=== completed at $(date -u) ==="
 } >> "$LOG_FILE" 2>&1
 
