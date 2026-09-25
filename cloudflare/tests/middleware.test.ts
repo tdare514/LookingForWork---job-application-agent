@@ -49,6 +49,9 @@ describe("api gate", () => {
   it("lets login through without a session, but still limited", async () => {
     expect((await call("/api/auth/github")).status).toBe(200);
     expect((await call("/api/auth/logout", { method: "POST" })).status).toBe(413);
+    // The page's sign-out sends an empty body, which declares a length of 0.
+    const logout = await call("/api/auth/logout", { method: "POST", headers: { "content-length": "0" } });
+    expect(await logout.text()).toBe("reached");
   });
 
   it("refuses a missing, unknown, revoked or expired session", async () => {

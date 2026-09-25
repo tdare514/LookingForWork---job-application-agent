@@ -70,22 +70,21 @@ describe("OAuth callback session duration", () => {
       } as Parameters<typeof onRequestGet>[0]);
 
       expect(response.status).toBe(302);
+      const setCookies = response.headers.getSetCookie();
+      expect(setCookies.find((c) => c.startsWith("jobagent_session="))).toContain("Max-Age=2592000;");
+      expect(setCookies.find((c) => c.startsWith("jobagent_csrf="))).toContain("Max-Age=2592000;");
 
       // Check that a session was created
       const session = await d1.asD1().prepare(
         "SELECT expires_at FROM owner_sessions ORDER BY created_at DESC LIMIT 1",
       ).first<{ expires_at: string }>();
 
-      expect(session).toBeDefined();
-      if (session) {
-        const expiresAt = new Date(session.expires_at);
-        const createdAt = new Date();
-        const expirationDays = (expiresAt.getTime() - createdAt.getTime()) / (1000 * 86_400);
-
-        // Should be ~30 days, allow 1 minute tolerance for test execution time
-        expect(expirationDays).toBeGreaterThan(29.9999);
-        expect(expirationDays).toBeLessThan(30.0001);
-      }
+      // `first` answers null, not undefined, when no row matched.
+      expect(session).not.toBeNull();
+      const expirationDays = (new Date(session!.expires_at).getTime() - Date.now()) / (1000 * 86_400);
+      // ~30 days, with a few seconds' tolerance for the test itself.
+      expect(expirationDays).toBeGreaterThan(29.9999);
+      expect(expirationDays).toBeLessThan(30.0001);
     } finally {
       globalThis.fetch = originalFetch;
     }

@@ -25,11 +25,8 @@ describe("authentication primitives", () => {
     expect(parseCookies(`${header}; jobagent_csrf=token`).get("jobagent_session")).toBe("synthetic");
   });
 
-  it("sets session and CSRF cookies to 30-day Max-Age", () => {
-    const sessionCookie = cookie("jobagent_session", "synthetic-id", SESSION_SECONDS);
-    const csrfCookieHeader = csrfCookie("synthetic-token");
-    expect(sessionCookie).toContain(`Max-Age=${SESSION_SECONDS}`);
-    expect(csrfCookieHeader).toContain(`Max-Age=${SESSION_SECONDS}`);
+  it("gives the CSRF cookie the 30-day session lifetime", () => {
     expect(SESSION_SECONDS).toBe(30 * 86_400);
+    expect(csrfCookie("synthetic-token")).toContain("Max-Age=2592000;");
   });
 });

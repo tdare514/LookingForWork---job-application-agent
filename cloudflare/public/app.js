@@ -12,7 +12,6 @@ const filter = document.querySelector("#status-filter");
 const snapshotAge = document.querySelector("#snapshot-age");
 const authContainer = document.querySelector(".auth-controls");
 let rows = [];
-let isSignedIn = false;
 
 const escapeHtml = (value) =>
   String(value).replace(
@@ -53,11 +52,13 @@ async function handleSignOut() {
     const response = await fetch("/api/auth/logout", {
       method: "POST",
       credentials: "same-origin",
-      headers: { "content-length": "0" },
+      // Content-Length is set by the browser, not by script. An explicit empty
+      // body makes it declare 0, which the middleware's body check requires.
+      body: "",
     });
     if (response.ok) window.location.reload();
   } catch {
-    // silently fail, keep the sign-out button
+    // Network failure: leave the button in place so it can be tried again.
   }
 }
 
@@ -124,7 +125,7 @@ async function loadFromApi() {
     credentials: "same-origin",
   });
   if (response.status === 401) {
-    // Not signed in; show sign-in link
+    // Not signed in: offer sign-in, then fall back to the snapshot.
     renderSignInLink();
     return false;
   }
@@ -134,7 +135,6 @@ async function loadFromApi() {
   rows = (payload.applications ?? []).map((row) => ({ ...row, state: row.status }));
   snapshotAge.textContent = "Live";
   snapshotAge.className = "badge badge-good";
-  isSignedIn = true;
   renderSignOutButton();
   return true;
 }
