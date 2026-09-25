@@ -543,9 +543,9 @@ def fetch(
 
     Nothing is applied to; rows land as `new` for you to triage.
     """
+    from jobagent.discovery.greenhouse import GreenhouseAdapter
     from jobagent.discovery.http import HostNotAllowed, PoliteClient, SourceDeclined
     from jobagent.discovery.workday import ALL as WORKDAY_ALL
-    from jobagent.matching.filters import Listing, location_incompatible, seniority_mismatch
 
     try:
         adapters = _select_adapters(source, company, WORKDAY_ALL)
@@ -566,22 +566,20 @@ def fetch(
         # Rows added before M0003 have no dedupe key, so they would look new
         # again on the next fetch. Idempotent, and a no-op once it has run.
         repo.backfill_normalized()
-        profile = load_stored_profile(store) if not no_prefilter else None
+        profile = None if no_prefilter else load_stored_profile(store)
+        if profile is None and not no_prefilter:
+            console.print("[dim]No profile stored; fetching without the pre-filter.[/dim]")
         for adapter in adapters:
             try:
-                # When pre-filtering, fetch all/many postings so the filter can reduce
-                # before the limit applies. Greenhouse adapter accepts None for unlimited;
-                # Workday needs an int, so use a large number.
-                if profile is not None:
-                    fetch_limit = None if hasattr(adapter, "board") else 10000
-                else:
-                    fetch_limit = limit
-                # Greenhouse supports int | None; Workday needs int.
-                # When profile is set, we ensure fetch_limit matches the adapter type.
-                if fetch_limit is None:
+                # Greenhouse returns its whole board in one call, so with a profile
+                # it is filtered before the limit and the limit keeps the first N
+                # relevant postings. Workday pages, so it keeps the limit and the
+                # filter trims that page before the per-posting detail requests.
+                whole_board = profile is not None and isinstance(adapter, GreenhouseAdapter)
+                if whole_board:
                     postings = list(adapter.fetch(client, limit=None))
                 else:
-                    postings = list(adapter.fetch(client, limit=fetch_limit))
+                    postings = list(adapter.fetch(client, limit=limit))
             except SourceDeclined as exc:
                 # One tenant refusing says nothing about the others, so keep going.
                 console.print(f"[yellow]{adapter.name} declined:[/yellow] {exc}")
@@ -594,50 +592,12 @@ def fetch(
                 console.print(f"[red]{adapter.name} returned an unexpected shape:[/red] {exc}")
                 continue
 
-            # Pre-filter by location and seniority before applying limit
-            dropped_by_rule: dict[str, int] = {}
-            total_fetched = len(postings)
             if profile is not None:
-                filtered_postings = []
-                for posting in postings:
-                    listing = Listing(
-                        company=posting.company,
-                        title=posting.title,
-                        location=posting.location,
-                        description=posting.description,
-                    )
-                    # Check location and seniority only -- absence passes both checks
-                    loc_verdict = location_incompatible(listing, profile)
-                    sen_verdict = seniority_mismatch(listing, profile)
-
-                    if not loc_verdict.passed:
-                        if loc_verdict.rule:
-                            dropped_by_rule[loc_verdict.rule] = (
-                                dropped_by_rule.get(loc_verdict.rule, 0) + 1
-                            )
-                    elif not sen_verdict.passed:
-                        if sen_verdict.rule:
-                            dropped_by_rule[sen_verdict.rule] = (
-                                dropped_by_rule.get(sen_verdict.rule, 0) + 1
-                            )
-                    else:
-                        filtered_postings.append(posting)
-
-                postings = filtered_postings[:limit]
-
-                # Print pre-filter results
-                kept_count = len(postings)
-                dropped_items = sorted(dropped_by_rule.items())
-                dropped_text = ", ".join(f"{count} {rule}" for rule, count in dropped_items)
-                if dropped_by_rule or kept_count > 0:
-                    console.print(
-                        f"[dim]kept {kept_count} of {total_fetched} from {adapter.name} "
-                        f"(dropped {dropped_text})[/dim]"
-                    )
-            else:
-                postings = postings[:limit]
-                if not no_prefilter:
-                    console.print("[dim]No profile stored; skipping pre-filter.[/dim]")
+                considered = len(postings)
+                passed, dropped = _prefilter(postings, profile)
+                postings = passed[:limit]
+                summary = _prefilter_summary(adapter.name, considered, passed, postings, dropped)
+                console.print(f"[dim]{summary}[/dim]")
 
             kept = [p for p in postings if not match or match.lower() in p.title.lower()]
             if details and kept:
@@ -675,6 +635,60 @@ def fetch(
         )
     if added:
         console.print("Run [bold]jobagent board[/bold] to triage them.")
+
+
+def _prefilter(
+    postings: list[RawPosting], profile: Profile
+) -> tuple[list[RawPosting], dict[str, int]]:
+    """Drop postings that clearly miss the profile's locations or seniority.
+
+    Only the two existing filters, reused as they are. Both pass anything they
+    cannot judge -- no stated level, no location -- so this drops a clear
+    mismatch and nothing else. Returns what passed, in order, and the drop count
+    per rule. Dropped postings never reach the board, so the counts are the only
+    record of them.
+    """
+    from jobagent.matching.filters import Listing, location_incompatible, seniority_mismatch
+
+    passed: list[RawPosting] = []
+    dropped: dict[str, int] = {}
+    for posting in postings:
+        listing = Listing(
+            company=posting.company,
+            title=posting.title,
+            location=posting.location,
+            description=posting.description,
+        )
+        for verdict in (
+            location_incompatible(listing, profile),
+            seniority_mismatch(listing, profile),
+        ):
+            if not verdict.passed:
+                rule = verdict.rule or "unnamed"
+                dropped[rule] = dropped.get(rule, 0) + 1
+                break
+        else:
+            passed.append(posting)
+    return passed, dropped
+
+
+def _prefilter_summary(
+    source: str,
+    considered: int,
+    passed: list[RawPosting],
+    kept: list[RawPosting],
+    dropped: dict[str, int],
+) -> str:
+    """`kept 12 of 703 from greenhouse:x (dropped 640 location, 51 seniority)`.
+
+    Passed plus dropped always equals considered. When the limit then cuts the
+    passing postings, the line says so rather than folding them into "dropped".
+    """
+    cut = ", ".join(f"{count} {rule}" for rule, count in sorted(dropped.items())) or "none"
+    line = f"kept {len(passed)} of {considered} from {source} (dropped {cut})"
+    if len(kept) < len(passed):
+        line += f"; the limit takes the first {len(kept)}"
+    return line
 
 
 def _with_detail(

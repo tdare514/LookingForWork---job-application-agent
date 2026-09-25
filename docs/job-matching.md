@@ -20,6 +20,13 @@ Each source has an adapter declaring its rate limit and terms constraints. The
 framework enforces the limit; the adapter cannot opt out. Raw payloads are
 stored for 30 days so a mapping bug can be fixed without re-fetching.
 
+With a profile stored, `fetch` runs two of the hard filters below — location
+and seniority — before anything is written, so a clear miss never reaches the
+board. Both pass what they cannot judge. A Greenhouse board arrives whole, so
+it is filtered before `--limit`; Workday is filtered page by page. The dropped
+counts per rule are printed and are the only record. `--no-prefilter` turns it
+off.
+
 ### 2. Normalize
 
 Every source maps to one canonical schema:

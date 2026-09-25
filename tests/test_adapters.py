@@ -498,5 +498,3 @@ def test_greenhouse_fetch_with_limit_truncates_to_limit() -> None:
     client = _client(handler, adapter.hosts)
     postings = list(adapter.fetch(client, limit=5))
     assert len(postings) == 5
-
-
