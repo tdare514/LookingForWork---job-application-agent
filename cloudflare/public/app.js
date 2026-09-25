@@ -10,7 +10,9 @@ const applications = document.querySelector("#applications");
 const summary = document.querySelector("#summary");
 const filter = document.querySelector("#status-filter");
 const snapshotAge = document.querySelector("#snapshot-age");
+const authContainer = document.querySelector(".auth-controls");
 let rows = [];
+let isSignedIn = false;
 
 const escapeHtml = (value) =>
   String(value).replace(
@@ -35,6 +37,37 @@ function describeAge(generatedAt) {
   if (hours < 1) return "Just now";
   if (hours < 24) return `${hours}h old`;
   return `${Math.floor(hours / 24)}d old`;
+}
+
+function renderSignInLink() {
+  if (!authContainer) return;
+  const link = document.createElement("a");
+  link.href = "/api/auth/github";
+  link.textContent = "Sign in with GitHub";
+  link.className = "auth-link";
+  authContainer.replaceChildren(link);
+}
+
+async function handleSignOut() {
+  try {
+    const response = await fetch("/api/auth/logout", {
+      method: "POST",
+      credentials: "same-origin",
+      headers: { "content-length": "0" },
+    });
+    if (response.ok) window.location.reload();
+  } catch {
+    // silently fail, keep the sign-out button
+  }
+}
+
+function renderSignOutButton() {
+  if (!authContainer) return;
+  const button = document.createElement("button");
+  button.textContent = "Sign out";
+  button.className = "auth-button";
+  button.addEventListener("click", handleSignOut);
+  authContainer.replaceChildren(button);
 }
 
 function renderSummary() {
@@ -90,12 +123,19 @@ async function loadFromApi() {
     headers: { Accept: "application/json" },
     credentials: "same-origin",
   });
-  if (!response.ok) return false; // signed out, not configured, or not deployed
+  if (response.status === 401) {
+    // Not signed in; show sign-in link
+    renderSignInLink();
+    return false;
+  }
+  if (!response.ok) return false; // not configured or not deployed
   const payload = await response.json();
   if (payload.source !== "d1") return false; // synthetic fixtures are not the board
   rows = (payload.applications ?? []).map((row) => ({ ...row, state: row.status }));
   snapshotAge.textContent = "Live";
   snapshotAge.className = "badge badge-good";
+  isSignedIn = true;
+  renderSignOutButton();
   return true;
 }
 

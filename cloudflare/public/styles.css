@@ -16,6 +16,11 @@ body { margin: 0; }
   gap: 1rem;
   padding: 1.5rem max(1rem, calc((100% - 56rem) / 2));
 }
+.header-controls {
+  align-items: center;
+  display: flex;
+  gap: 0.75rem;
+}
 main { margin: 0 auto; max-width: 56rem; padding: 1rem; }
 h1, h2, h3, p { margin-top: 0; }
 h1 { font-size: clamp(1.5rem, 5vw, 2rem); margin-bottom: 0; }
@@ -95,3 +100,27 @@ select {
   .application-list { grid-template-columns: repeat(2, 1fr); }
 }
 .next-action { color: #53616d; font-size: .9rem; margin: 0 0 .5rem; }
+.auth-link {
+  color: #fff;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-decoration: none;
+  white-space: nowrap;
+}
+.auth-link:hover {
+  text-decoration: underline;
+}
+.auth-button {
+  background: transparent;
+  border: 1px solid #fff;
+  border-radius: 0.4rem;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 700;
+  padding: 0.3rem 0.6rem;
+  white-space: nowrap;
+}
+.auth-button:hover {
+  background: rgba(255, 255, 255, 0.1);
+}

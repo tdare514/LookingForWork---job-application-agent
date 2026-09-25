@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { cookie, open, parseCookies, seal } from "../src/auth.js";
+import { cookie, csrfCookie, open, parseCookies, seal } from "../src/auth.js";
+import { SESSION_SECONDS } from "../src/config.js";
 
 describe("authentication primitives", () => {
   it("seals transaction data and rejects tampering", async () => {
@@ -22,5 +23,13 @@ describe("authentication primitives", () => {
     expect(header).toContain("HttpOnly");
     expect(header).toContain("Secure");
     expect(parseCookies(`${header}; jobagent_csrf=token`).get("jobagent_session")).toBe("synthetic");
+  });
+
+  it("sets session and CSRF cookies to 30-day Max-Age", () => {
+    const sessionCookie = cookie("jobagent_session", "synthetic-id", SESSION_SECONDS);
+    const csrfCookieHeader = csrfCookie("synthetic-token");
+    expect(sessionCookie).toContain(`Max-Age=${SESSION_SECONDS}`);
+    expect(csrfCookieHeader).toContain(`Max-Age=${SESSION_SECONDS}`);
+    expect(SESSION_SECONDS).toBe(30 * 86_400);
   });
 });
