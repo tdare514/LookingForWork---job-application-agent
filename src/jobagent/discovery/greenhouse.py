@@ -12,12 +12,14 @@ replacing it.
 
 from __future__ import annotations
 
+import html as html_module
 from collections.abc import Iterable
 from dataclasses import dataclass
 from typing import Any
 
 from jobagent.discovery.adapter import RawPosting, SourceTerms
 from jobagent.discovery.http import PoliteClient
+from jobagent.discovery.text import html_to_text
 
 HOST = "boards-api.greenhouse.io"
 
@@ -49,7 +51,9 @@ class GreenhouseAdapter:
 
     @property
     def endpoint(self) -> str:
-        return f"https://{HOST}/v1/boards/{self.board}/jobs"
+        # Request content=true to get HTML descriptions in each job's content field.
+        # Greenhouse's API returns escaped HTML that must be unescaped before parsing.
+        return f"https://{HOST}/v1/boards/{self.board}/jobs?content=true"
 
     def fetch(self, client: PoliteClient, *, limit: int = 50) -> Iterable[RawPosting]:
         body = client.get_json(self.endpoint)
@@ -77,6 +81,16 @@ class GreenhouseAdapter:
                     f"{self.name}: job missing title or id. Keys were: {sorted(entry)[:12]}"
                 )
             location = entry.get("location")
+            # Extract content from the job entry if present. Greenhouse returns escaped HTML
+            # (e.g., &lt;p&gt;...) which must be unescaped before parsing to plain text.
+            # `or None` as Workday does: markup that renders to nothing is no
+            # description, and an empty string would read downstream as one.
+            content = entry.get("content")
+            description = (
+                html_to_text(html_module.unescape(content)) or None
+                if isinstance(content, str)
+                else None
+            )
             out.append(
                 RawPosting(
                     source=self.name,
@@ -90,6 +104,7 @@ class GreenhouseAdapter:
                     ),
                     url=str(entry.get("absolute_url")) if entry.get("absolute_url") else None,
                     posted_text=str(entry.get("updated_at")) if entry.get("updated_at") else None,
+                    description=description,
                     raw=entry,
                 )
             )
