@@ -36,6 +36,24 @@ if TYPE_CHECKING:  # Imported lazily at runtime; the CLI keeps its startup cheap
 app = typer.Typer(help="Personal, human-in-the-loop job application agent.", no_args_is_help=True)
 console = Console()
 
+# Fields to include in list --json output. Built explicitly as an allowlist,
+# not from job.__dict__ minus some keys: a new column on Job must not appear in
+# the JSON by default. The choice mirrors snapshot.py's SNAPSHOT_FIELDS.
+#
+# notes and state_reason are free text that routinely names recruiters and carries
+# judgements about employers; both are critical in the PII registry. They stay
+# out of machine-readable output that is easy to paste somewhere.
+LIST_JSON_FIELDS: tuple[str, ...] = (
+    "id",
+    "company",
+    "title",
+    "location",
+    "url",
+    "deadline",
+    "state",
+    "snoozed_until",
+)
+
 
 @app.command()
 def init() -> None:
@@ -1239,12 +1257,21 @@ def board() -> None:
 
 
 @app.command("list")
-def list_jobs() -> None:
+def list_jobs(
+    as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+) -> None:
     """Print the board without the interactive UI."""
     with Storage() as store:
         jobs = BoardRepo(store).all()
     if not jobs:
+        if as_json:
+            console.print_json(data=[])
+            return
         console.print("[yellow]Nothing tracked yet.[/yellow] Add one with `jobagent add`.")
+        return
+    if as_json:
+        data = [{field: getattr(job, field) for field in LIST_JSON_FIELDS} for job in jobs]
+        console.print_json(data=data)
         return
     table = Table(title="Job board")
     table.add_column(" ")
