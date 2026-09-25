@@ -16,3 +16,4 @@ that supersedes the old one.
 | [0008](0008-fetching-is-viable-crawler-still-optional.md) | Fetching works; the crawler stays optional anyway | Proposed — supersedes 0005 |
 | [0009](0009-phone-snapshot.md) | A read-only phone snapshot, behind Cloudflare Access | Accepted — extends 0003 |
 | [0010](0010-hosted-tracker-companion.md) | A hosted tracker companion with owner-only writes | Accepted — amends 0009 |
+| [0011](0011-cloud-daily-fetch.md) | A daily fetch that runs without the laptop | Proposed — amends 0010 |
