@@ -22,8 +22,8 @@ The digest is appended to a log file under your data directory (`~/.local/share/
 If you want to sync to a hosted view, run that separately by hand:
 
 ```bash
-jobagent sync --dry-run   # preview what would sync
-jobagent sync --yes       # commit the sync
+jobagent sync             # dry run: prints what would sync, sends nothing
+jobagent sync --yes       # actually send it
 ```
 
 ## Installation
