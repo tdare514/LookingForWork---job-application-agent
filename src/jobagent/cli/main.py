@@ -518,17 +518,25 @@ def fetch(
         ..., help="Adapter name: workday:rbc, greenhouse:acme, or 'all' for every tenant."
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Max postings to pull."),
-    match: str = typer.Option(None, "--match", "-m", help="Only keep titles containing this text."),
+    match: str | None = typer.Option(
+        None, "--match", "-m", help="Only keep titles containing this text."
+    ),
     details: bool = typer.Option(
         False,
         "--details",
         help="Also fetch each posting's description and closing date. One extra "
         "request per posting, so it is slower.",
     ),
-    company: str = typer.Option(
+    company: str | None = typer.Option(
         None,
         "--company",
         help="Display name for company (greenhouse only; defaults to board slug title-cased).",
+    ),
+    no_prefilter: bool = typer.Option(
+        False,
+        "--no-prefilter",
+        "--all",
+        help="Skip location and seniority pre-filtering, keep all postings up to the limit.",
     ),
 ) -> None:
     """Pull postings from a source onto the board.
@@ -537,6 +545,7 @@ def fetch(
     """
     from jobagent.discovery.http import HostNotAllowed, PoliteClient, SourceDeclined
     from jobagent.discovery.workday import ALL as WORKDAY_ALL
+    from jobagent.matching.filters import Listing, location_incompatible, seniority_mismatch
 
     try:
         adapters = _select_adapters(source, company, WORKDAY_ALL)
@@ -557,9 +566,22 @@ def fetch(
         # Rows added before M0003 have no dedupe key, so they would look new
         # again on the next fetch. Idempotent, and a no-op once it has run.
         repo.backfill_normalized()
+        profile = load_stored_profile(store) if not no_prefilter else None
         for adapter in adapters:
             try:
-                postings = list(adapter.fetch(client, limit=limit))
+                # When pre-filtering, fetch all/many postings so the filter can reduce
+                # before the limit applies. Greenhouse adapter accepts None for unlimited;
+                # Workday needs an int, so use a large number.
+                if profile is not None:
+                    fetch_limit = None if hasattr(adapter, "board") else 10000
+                else:
+                    fetch_limit = limit
+                # Greenhouse supports int | None; Workday needs int.
+                # When profile is set, we ensure fetch_limit matches the adapter type.
+                if fetch_limit is None:
+                    postings = list(adapter.fetch(client, limit=None))
+                else:
+                    postings = list(adapter.fetch(client, limit=fetch_limit))
             except SourceDeclined as exc:
                 # One tenant refusing says nothing about the others, so keep going.
                 console.print(f"[yellow]{adapter.name} declined:[/yellow] {exc}")
@@ -571,6 +593,51 @@ def fetch(
             except Exception as exc:  # schema drift -- loud, not silent
                 console.print(f"[red]{adapter.name} returned an unexpected shape:[/red] {exc}")
                 continue
+
+            # Pre-filter by location and seniority before applying limit
+            dropped_by_rule: dict[str, int] = {}
+            total_fetched = len(postings)
+            if profile is not None:
+                filtered_postings = []
+                for posting in postings:
+                    listing = Listing(
+                        company=posting.company,
+                        title=posting.title,
+                        location=posting.location,
+                        description=posting.description,
+                    )
+                    # Check location and seniority only -- absence passes both checks
+                    loc_verdict = location_incompatible(listing, profile)
+                    sen_verdict = seniority_mismatch(listing, profile)
+
+                    if not loc_verdict.passed:
+                        if loc_verdict.rule:
+                            dropped_by_rule[loc_verdict.rule] = (
+                                dropped_by_rule.get(loc_verdict.rule, 0) + 1
+                            )
+                    elif not sen_verdict.passed:
+                        if sen_verdict.rule:
+                            dropped_by_rule[sen_verdict.rule] = (
+                                dropped_by_rule.get(sen_verdict.rule, 0) + 1
+                            )
+                    else:
+                        filtered_postings.append(posting)
+
+                postings = filtered_postings[:limit]
+
+                # Print pre-filter results
+                kept_count = len(postings)
+                dropped_items = sorted(dropped_by_rule.items())
+                dropped_text = ", ".join(f"{count} {rule}" for rule, count in dropped_items)
+                if dropped_by_rule or kept_count > 0:
+                    console.print(
+                        f"[dim]kept {kept_count} of {total_fetched} from {adapter.name} "
+                        f"(dropped {dropped_text})[/dim]"
+                    )
+            else:
+                postings = postings[:limit]
+                if not no_prefilter:
+                    console.print("[dim]No profile stored; skipping pre-filter.[/dim]")
 
             kept = [p for p in postings if not match or match.lower() in p.title.lower()]
             if details and kept:
@@ -1164,7 +1231,9 @@ def daily(
     for name in source or []:
         console.print(f"[dim]fetching {name}…[/dim]")
         try:
-            fetch(name, limit=limit, match="", details=True)
+            # Pass all parameters explicitly: Typer OptionInfo defaults are truthy
+            # when called directly from Python, so we must not omit no_prefilter.
+            fetch(name, limit=limit, match="", details=True, company=None, no_prefilter=False)
         except typer.Exit as exc:
             if exc.exit_code:
                 failures.append(f"{name} (unknown adapter, or nothing fetched)")

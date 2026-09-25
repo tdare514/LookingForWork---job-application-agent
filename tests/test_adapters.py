@@ -448,3 +448,55 @@ def test_greenhouse_adapter_fails_on_unknown_board_with_unambiguous_error() -> N
     adapter = GreenhouseAdapter(board="nonexistent", company="Nonexistent")
     with pytest.raises(GreenhouseSchema, match="no 'jobs'"):
         list(adapter.fetch(_client(handler, adapter.hosts), limit=5))
+
+
+def test_greenhouse_fetch_without_limit_returns_all_postings() -> None:
+    """With limit=None, greenhouse adapter returns all postings."""
+
+    board_data = {
+        "jobs": [
+            {
+                "id": i,
+                "title": f"Job {i}",
+                "location": {"name": "Toronto, ON"},
+                "absolute_url": f"https://example.com/{i}",
+                "updated_at": "2026-09-10T12:00:00Z",
+            }
+            for i in range(5)
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=board_data)
+
+    adapter = GreenhouseAdapter(board="test", company="Test")
+    client = _client(handler, adapter.hosts)
+    postings = list(adapter.fetch(client, limit=None))
+    assert len(postings) == 5
+
+
+def test_greenhouse_fetch_with_limit_truncates_to_limit() -> None:
+    """With limit=N, greenhouse adapter returns at most N postings."""
+
+    board_data = {
+        "jobs": [
+            {
+                "id": i,
+                "title": f"Job {i}",
+                "location": {"name": "Toronto, ON"},
+                "absolute_url": f"https://example.com/{i}",
+                "updated_at": "2026-09-10T12:00:00Z",
+            }
+            for i in range(10)
+        ]
+    }
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json=board_data)
+
+    adapter = GreenhouseAdapter(board="test", company="Test")
+    client = _client(handler, adapter.hosts)
+    postings = list(adapter.fetch(client, limit=5))
+    assert len(postings) == 5
+
+
