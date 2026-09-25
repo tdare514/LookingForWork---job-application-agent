@@ -369,6 +369,9 @@ def test_greenhouse_job_with_blank_content_has_none_description() -> None:
     }
     postings = adapter.parse_response(page_with_blank_content)
     assert postings[0].description is None
+    # Markup with no text in it is no description either.
+    page_with_blank_content["jobs"][0]["content"] = "&lt;p&gt;&lt;/p&gt;  "
+    assert adapter.parse_response(page_with_blank_content)[0].description is None
 
 
 # -- CLI support for Greenhouse sources ----------------------------------------

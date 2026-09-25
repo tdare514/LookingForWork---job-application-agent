@@ -83,10 +83,14 @@ class GreenhouseAdapter:
             location = entry.get("location")
             # Extract content from the job entry if present. Greenhouse returns escaped HTML
             # (e.g., &lt;p&gt;...) which must be unescaped before parsing to plain text.
+            # `or None` as Workday does: markup that renders to nothing is no
+            # description, and an empty string would read downstream as one.
             content = entry.get("content")
-            description = None
-            if isinstance(content, str) and content:
-                description = html_to_text(html_module.unescape(content))
+            description = (
+                html_to_text(html_module.unescape(content)) or None
+                if isinstance(content, str)
+                else None
+            )
             out.append(
                 RawPosting(
                     source=self.name,
