@@ -45,3 +45,6 @@ venv/
 
 # Filled-in launchd plist files (template only is committed)
 scripts/launchd/*.plist
+
+# Claude Code agent worktrees, created under the repo by isolated subagents
+.claude/worktrees/
