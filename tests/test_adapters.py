@@ -284,6 +284,93 @@ def test_greenhouse_terms_are_unambiguous_unlike_workdays() -> None:
     assert adapter.terms.allows_automated_access.startswith("yes")
 
 
+def test_greenhouse_request_includes_content_parameter() -> None:
+    """The content=true parameter is sent to fetch HTML descriptions."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert "content=true" in str(request.url), f"Expected 'content=true' in {request.url}"
+        return httpx.Response(200, json=GREENHOUSE_PAGE)
+
+    adapter = GreenhouseAdapter(board="acme", company="Acme")
+    list(adapter.fetch(_client(handler, adapter.hosts), limit=1))
+
+
+def test_greenhouse_escapes_html_in_content_field() -> None:
+    """Escaped HTML entities in content are decoded and converted to text."""
+    adapter = GreenhouseAdapter(board="acme", company="Acme")
+    # Simulate Greenhouse returning escaped HTML with tags and entities.
+    # The content field contains entity-escaped HTML (e.g., &lt;p&gt; instead of <p>).
+    escaped_html = (
+        "&lt;p&gt;Join our &amp; team&lt;/p&gt;"
+        "&lt;ul&gt;&lt;li&gt;5+ years&lt;/li&gt;"
+        "&lt;li&gt;Python&lt;/li&gt;&lt;/ul&gt;"
+    )
+    page_with_content = {
+        "jobs": [
+            {
+                "id": 4567,
+                "title": "Product Analyst Intern",
+                "location": {"name": "Toronto, ON"},
+                "absolute_url": "https://boards.greenhouse.io/acme/jobs/4567",
+                "updated_at": "2026-09-10T12:00:00Z",
+                "content": escaped_html,
+            }
+        ]
+    }
+    postings = adapter.parse_response(page_with_content)
+    assert postings[0].description is not None
+    # Check that HTML tags are removed, entities are decoded, and list items are marked.
+    assert "Join our & team" in postings[0].description
+    assert "5+ years" in postings[0].description
+    assert "Python" in postings[0].description
+    # List items should have dashes as markers.
+    assert "- 5+ years" in postings[0].description
+    assert "- Python" in postings[0].description
+    # HTML tags should not appear in the output.
+    assert "<" not in postings[0].description
+    assert ">" not in postings[0].description
+    assert "&lt;" not in postings[0].description
+    assert "&amp;" not in postings[0].description
+
+
+def test_greenhouse_job_without_content_has_none_description() -> None:
+    """A job without a content field still parses with description=None."""
+    adapter = GreenhouseAdapter(board="acme", company="Acme")
+    page_without_content = {
+        "jobs": [
+            {
+                "id": 4567,
+                "title": "Product Analyst Intern",
+                "location": {"name": "Toronto, ON"},
+                "absolute_url": "https://boards.greenhouse.io/acme/jobs/4567",
+                "updated_at": "2026-09-10T12:00:00Z",
+                # No content field.
+            }
+        ]
+    }
+    postings = adapter.parse_response(page_without_content)
+    assert postings[0].description is None
+
+
+def test_greenhouse_job_with_blank_content_has_none_description() -> None:
+    """A job with an empty content field is treated as having no description."""
+    adapter = GreenhouseAdapter(board="acme", company="Acme")
+    page_with_blank_content = {
+        "jobs": [
+            {
+                "id": 4567,
+                "title": "Product Analyst Intern",
+                "location": {"name": "Toronto, ON"},
+                "absolute_url": "https://boards.greenhouse.io/acme/jobs/4567",
+                "updated_at": "2026-09-10T12:00:00Z",
+                "content": "",  # Empty string.
+            }
+        ]
+    }
+    postings = adapter.parse_response(page_with_blank_content)
+    assert postings[0].description is None
+
+
 # -- CLI support for Greenhouse sources ----------------------------------------
 
 
