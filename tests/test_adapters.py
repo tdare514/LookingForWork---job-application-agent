@@ -301,17 +301,51 @@ def test_greenhouse_fetch_through_the_polite_client() -> None:
     assert postings[0].company == "Acme"
 
 
-def test_greenhouse_board_slug_defaults_to_title_case_company_name() -> None:
-    """When no --company flag is given, the board slug becomes the display name."""
-    adapter = GreenhouseAdapter(board="my-startup", company="My-Startup")
-    assert adapter.company == "My-Startup"
-    # Title-casing is done at the CLI level, not in the adapter
+def test_fetch_selects_a_greenhouse_adapter_with_the_default_company_name() -> None:
+    """No --company given: the CLI's own defaulting title-cases the board slug."""
+    from jobagent.cli.main import _select_adapters
+
+    adapters = _select_adapters("greenhouse:my-startup", None, ())
+    assert len(adapters) == 1
+    assert isinstance(adapters[0], GreenhouseAdapter)
+    assert adapters[0].board == "my-startup"
+    assert adapters[0].company == "My-Startup"
 
 
-def test_greenhouse_adapter_uses_custom_company_name() -> None:
-    """When --company is provided, it overrides the default."""
-    adapter = GreenhouseAdapter(board="my-startup", company="My Startup Inc")
-    assert adapter.company == "My Startup Inc"
+def test_fetch_selects_a_greenhouse_adapter_with_an_explicit_company_name() -> None:
+    """--company overrides the title-cased default."""
+    from jobagent.cli.main import _select_adapters
+
+    adapters = _select_adapters("greenhouse:my-startup", "My Startup Inc", ())
+    assert adapters[0].company == "My Startup Inc"
+
+
+def test_fetch_rejects_a_greenhouse_source_with_no_board_slug() -> None:
+    from jobagent.cli.main import _select_adapters
+
+    with pytest.raises(ValueError, match="invalid greenhouse source"):
+        _select_adapters("greenhouse:", None, ())
+
+
+def test_fetch_all_means_every_workday_tenant_never_greenhouse() -> None:
+    """'all' must keep meaning Workday only -- a greenhouse board is opt-in by name."""
+    from jobagent.cli.main import _select_adapters
+
+    workday = (RBC, BMO)
+    assert _select_adapters("all", None, workday) == list(workday)
+
+
+def test_fetch_selects_the_named_workday_tenant() -> None:
+    from jobagent.cli.main import _select_adapters
+
+    workday = (RBC, BMO)
+    assert _select_adapters("workday:rbc", None, workday) == [RBC]
+
+
+def test_fetch_finds_nothing_for_an_unknown_source() -> None:
+    from jobagent.cli.main import _select_adapters
+
+    assert _select_adapters("nonsense", None, (RBC,)) == []
 
 
 def test_greenhouse_adapter_fails_on_unknown_board_with_unambiguous_error() -> None:

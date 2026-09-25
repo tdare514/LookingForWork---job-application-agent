@@ -417,6 +417,27 @@ def purge_cmd(
         raise typer.Exit(code=1)
 
 
+def _select_adapters(source: str, company: str | None, workday_all: tuple[Any, ...]) -> list[Any]:
+    """Which adapter(s) `source` names. Pure and network-free, so the parsing that
+    decides what `jobagent fetch` is about to hit is testable on its own -- this is
+    exactly the kind of branch that would otherwise fail silently: a typo routing
+    to the wrong tenant, or an empty board slug reaching the network layer.
+
+    Raises `ValueError` for a malformed `greenhouse:` source; returns an empty list
+    for an unrecognized one, matching the pre-existing "no match" convention.
+    """
+    from jobagent.discovery.greenhouse import GreenhouseAdapter
+
+    if source == "all":
+        return list(workday_all)
+    if source.startswith("greenhouse:"):
+        board_slug = source.split(":", 1)[1]
+        if not board_slug:
+            raise ValueError(f"invalid greenhouse source {source!r}. Use: greenhouse:board-slug")
+        return [GreenhouseAdapter(board=board_slug, company=company or board_slug.title())]
+    return [a for a in workday_all if a.name == source]
+
+
 @app.command()
 def fetch(
     source: str = typer.Argument(
@@ -440,24 +461,14 @@ def fetch(
 
     Nothing is applied to; rows land as `new` for you to triage.
     """
-    from jobagent.discovery.greenhouse import GreenhouseAdapter
     from jobagent.discovery.http import HostNotAllowed, PoliteClient, SourceDeclined
     from jobagent.discovery.workday import ALL as WORKDAY_ALL
 
-    adapters: list[Any] = []
-    if source == "all":
-        adapters = list(WORKDAY_ALL)
-    elif source.startswith("greenhouse:"):
-        board_slug = source.split(":", 1)[1]
-        if not board_slug:
-            console.print(
-                f"[red]Invalid greenhouse source[/red] {source!r}. Use: greenhouse:board-slug"
-            )
-            raise typer.Exit(code=1)
-        company_name = company or board_slug.title()
-        adapters = [GreenhouseAdapter(board=board_slug, company=company_name)]
-    else:
-        adapters = [a for a in WORKDAY_ALL if a.name == source]
+    try:
+        adapters = _select_adapters(source, company, WORKDAY_ALL)
+    except ValueError as exc:
+        console.print(f"[red]{exc}[/red]")
+        raise typer.Exit(code=1) from exc
 
     if not adapters:
         console.print(f"[red]Unknown source[/red] {source!r}.")
