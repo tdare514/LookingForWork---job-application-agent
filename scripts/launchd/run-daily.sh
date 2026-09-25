@@ -42,14 +42,27 @@ fi
 
 LOG_FILE="$DATA_DIR/jobagent-daily.log"
 
+# Build the --source arguments from JOBAGENT_DAILY_SOURCES, a whitespace-separated
+# list of `jobagent fetch` source names. Source names never contain spaces, so a
+# plain split is enough. Unset, empty, or only whitespace all mean the defaults:
+# a run with no sources would fetch nothing and look like a quiet day.
+SOURCES=()
+read -ra SOURCES <<<"${JOBAGENT_DAILY_SOURCES:-}"
+if [[ ${#SOURCES[@]} -eq 0 ]]; then
+    SOURCES=("workday:rbc" "workday:bmo" "workday:td")
+fi
+
+# Build the --source arguments array
+DAILY_ARGS=()
+for source in "${SOURCES[@]}"; do
+    DAILY_ARGS+=(--source "$source")
+done
+
 # Append to the log file with timestamp.
 # Redirect both stdout and stderr to the log.
 {
     echo "=== jobagent daily run at $(date -u) ==="
-    python3 -m jobagent daily \
-        --source workday:rbc \
-        --source workday:bmo \
-        --source workday:td
+    python3 -m jobagent daily "${DAILY_ARGS[@]}"
     echo "=== completed at $(date -u) ==="
 } >> "$LOG_FILE" 2>&1
 

@@ -14,6 +14,17 @@
         <string>__PATH_TO_WRAPPER_SCRIPT__</string>
     </array>
 
+    <!-- Environment variables -->
+    <key>EnvironmentVariables</key>
+    <dict>
+        <!-- Configure which job sources to fetch (space-separated list of source names).
+             Uncomment and edit to change which sources are fetched.
+             Example: workday:rbc workday:bmo greenhouse:stripe
+             If unset, defaults to: workday:rbc workday:bmo workday:td -->
+        <!-- <key>JOBAGENT_DAILY_SOURCES</key>
+        <string>workday:rbc workday:bmo workday:td</string> -->
+    </dict>
+
     <!-- Run daily at a fixed time (10:00 AM local time) -->
     <!-- Adjust Hour and Minute to your preference -->
     <key>StartCalendarInterval</key>

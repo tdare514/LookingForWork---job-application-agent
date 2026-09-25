@@ -162,16 +162,30 @@ Common issues:
 - **venv not found:** The wrapper script looks for `.venv/bin/activate` relative to the repository root. If you use a different venv location, edit the script.
 - **Source failed with 401/403:** One of the job sources (RBC, BMO, or TD) declined the request. This is normal and `daily` will continue with the other sources and print a summary. Check the log for details.
 
-### Editing sources
+### Configuring sources
 
-To change which sources are fetched, edit the `jobagent daily` command in `scripts/launchd/run-daily.sh`. For example, to fetch only from RBC:
+To change which sources are fetched, set the `JOBAGENT_DAILY_SOURCES` environment variable in the plist. This avoids editing a tracked file, which would leave your checkout dirty.
 
-```bash
-python3 -m jobagent daily \
-    --source workday:rbc
+Edit `~/Library/LaunchAgents/com.jobagent.daily.plist` and uncomment the `JOBAGENT_DAILY_SOURCES` line in the `EnvironmentVariables` dict. For example, to fetch from RBC, BMO, and a Greenhouse board:
+
+```xml
+<key>EnvironmentVariables</key>
+<dict>
+    <key>JOBAGENT_DAILY_SOURCES</key>
+    <string>workday:rbc workday:bmo greenhouse:stripe</string>
+</dict>
 ```
 
-Then reload the job.
+Source names are space-separated. If `JOBAGENT_DAILY_SOURCES` is unset or empty, the default sources are used: `workday:rbc workday:bmo workday:td`.
+
+**Note on Greenhouse sources:** Greenhouse sources are referenced by their board slug (e.g. `greenhouse:stripe` for Stripe's board). Since `jobagent daily` has no `--company` flag, the daily output uses the title-cased slug as the company name (e.g. "Stripe" for `greenhouse:stripe`).
+
+After editing the plist, reload the job:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.jobagent.daily.plist
+launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
+```
 
 ## See also
 
