@@ -32,7 +32,6 @@ from jobagent.tracking.repo import BoardRepo
 if TYPE_CHECKING:  # Imported lazily at runtime; the CLI keeps its startup cheap.
     from jobagent.discovery.adapter import RawPosting
     from jobagent.discovery.http import PoliteClient
-    from jobagent.discovery.workday import WorkdayAdapter
 
 app = typer.Typer(help="Personal, human-in-the-loop job application agent.", no_args_is_help=True)
 console = Console()
@@ -421,7 +420,7 @@ def purge_cmd(
 @app.command()
 def fetch(
     source: str = typer.Argument(
-        ..., help="Adapter name, e.g. workday:rbc, or 'all' for every Workday tenant."
+        ..., help="Adapter name: workday:rbc, greenhouse:acme, or 'all' for every tenant."
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Max postings to pull."),
     match: str = typer.Option(None, "--match", "-m", help="Only keep titles containing this text."),
@@ -431,20 +430,39 @@ def fetch(
         help="Also fetch each posting's description and closing date. One extra "
         "request per posting, so it is slower.",
     ),
+    company: str = typer.Option(
+        None,
+        "--company",
+        help="Display name for company (greenhouse only; defaults to board slug title-cased).",
+    ),
 ) -> None:
     """Pull postings from a source onto the board.
 
     Nothing is applied to; rows land as `new` for you to triage.
     """
+    from jobagent.discovery.greenhouse import GreenhouseAdapter
     from jobagent.discovery.http import HostNotAllowed, PoliteClient, SourceDeclined
     from jobagent.discovery.workday import ALL as WORKDAY_ALL
 
-    adapters = (
-        list(WORKDAY_ALL) if source == "all" else [a for a in WORKDAY_ALL if a.name == source]
-    )
+    adapters: list[Any] = []
+    if source == "all":
+        adapters = list(WORKDAY_ALL)
+    elif source.startswith("greenhouse:"):
+        board_slug = source.split(":", 1)[1]
+        if not board_slug:
+            console.print(
+                f"[red]Invalid greenhouse source[/red] {source!r}. Use: greenhouse:board-slug"
+            )
+            raise typer.Exit(code=1)
+        company_name = company or board_slug.title()
+        adapters = [GreenhouseAdapter(board=board_slug, company=company_name)]
+    else:
+        adapters = [a for a in WORKDAY_ALL if a.name == source]
+
     if not adapters:
         console.print(f"[red]Unknown source[/red] {source!r}.")
-        console.print("Known: " + ", ".join(a.name for a in WORKDAY_ALL) + ", or 'all'.")
+        workday_sources = ", ".join(a.name for a in WORKDAY_ALL)
+        console.print(f"Known Workday sources: {workday_sources}, 'all', or greenhouse:board-slug.")
         raise typer.Exit(code=1)
 
     hosts = {h for a in adapters for h in a.hosts}
@@ -508,7 +526,7 @@ def fetch(
 
 
 def _with_detail(
-    adapter: WorkdayAdapter, client: PoliteClient, posting: RawPosting
+    adapter: object, client: PoliteClient, posting: RawPosting
 ) -> tuple[RawPosting, int]:
     """Fetch one posting's detail, tolerating failure.
 
@@ -517,8 +535,14 @@ def _with_detail(
     withdrawn between the list call and this one -- costs that description and
     nothing more. Losing the run over one bad posting would be worse than losing
     the field.
+
+    If the adapter does not support detail fetching, returns the posting unchanged.
     """
     from jobagent.discovery.http import SourceDeclined
+
+    # Only Workday adapters have fetch_detail; others don't fetch details separately
+    if not hasattr(adapter, "fetch_detail"):
+        return posting, 0
 
     try:
         return adapter.fetch_detail(client, posting), 0

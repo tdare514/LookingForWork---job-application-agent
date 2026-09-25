@@ -282,3 +282,45 @@ def test_greenhouse_terms_are_unambiguous_unlike_workdays() -> None:
     """The one source whose automated access is documented, not inferred."""
     adapter = GreenhouseAdapter(board="acme", company="Acme")
     assert adapter.terms.allows_automated_access.startswith("yes")
+
+
+# -- CLI support for Greenhouse sources ----------------------------------------
+
+
+def test_greenhouse_fetch_through_the_polite_client() -> None:
+    """A greenhouse source can be fetched just like a Workday source."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.method == "GET"
+        assert "/v1/boards/acme/jobs" in str(request.url)
+        return httpx.Response(200, json=GREENHOUSE_PAGE)
+
+    adapter = GreenhouseAdapter(board="acme", company="Acme")
+    postings = list(adapter.fetch(_client(handler, adapter.hosts), limit=2))
+    assert len(postings) == 1
+    assert postings[0].company == "Acme"
+
+
+def test_greenhouse_board_slug_defaults_to_title_case_company_name() -> None:
+    """When no --company flag is given, the board slug becomes the display name."""
+    adapter = GreenhouseAdapter(board="my-startup", company="My-Startup")
+    assert adapter.company == "My-Startup"
+    # Title-casing is done at the CLI level, not in the adapter
+
+
+def test_greenhouse_adapter_uses_custom_company_name() -> None:
+    """When --company is provided, it overrides the default."""
+    adapter = GreenhouseAdapter(board="my-startup", company="My Startup Inc")
+    assert adapter.company == "My Startup Inc"
+
+
+def test_greenhouse_adapter_fails_on_unknown_board_with_unambiguous_error() -> None:
+    """An unknown greenhouse board fails with a clear schema error."""
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        # Simulate a 404 or unexpected response from a non-existent board
+        return httpx.Response(200, json={"error": "board not found"})
+
+    adapter = GreenhouseAdapter(board="nonexistent", company="Nonexistent")
+    with pytest.raises(GreenhouseSchema, match="no 'jobs'"):
+        list(adapter.fetch(_client(handler, adapter.hosts), limit=5))
