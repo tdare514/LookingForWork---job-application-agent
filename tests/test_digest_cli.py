@@ -6,6 +6,8 @@ as read, which would break "new since you last looked" silently.
 
 from __future__ import annotations
 
+import json
+
 from typer.testing import CliRunner
 
 from jobagent.cli import main as cli
@@ -75,34 +77,27 @@ def test_digest_with_no_record_flag_does_not_record(store: Storage) -> None:
 
 
 def test_daily_does_not_mark_digest_as_read(store: Storage) -> None:
-    """After daily runs, a following digest still shows jobs added before as new.
+    """After daily runs, the next digest still measures "new" from the owner's last read.
 
-    This is the critical test from #98: the scheduled daily run must not reset
-    the "last looked" baseline, or the next human run shows only postings added
-    after the cron run -- usually nothing.
+    The critical test from #98. "New" is every row first seen on or after the date
+    of the last recorded digest, so an unattended daily that recorded one would
+    move that date forward every morning, and anything not read on its first day
+    would drop out of "new". Asserting on the baseline rather than on a particular
+    row appearing keeps this independent of whether that row clears the
+    shortlist's score threshold.
     """
-    profile = _make_profile()
-    store_profile(store, profile)
-    repo = BoardRepo(store)
-
-    # Add a job before the daily run
-    repo.add("RBC", "Risk Analyst")
-    initial_job_id = 1
+    store_profile(store, _make_profile())
+    BoardRepo(store).add("RBC", "Risk Analyst")
 
     runner = CliRunner()
-
-    # Run daily with no sources (no network call, just score existing jobs)
+    # No --source, so no network: daily extracts, scores and prints the digest.
     result = runner.invoke(cli.app, ["daily"])
     assert result.exit_code == 0, result.output
 
-    # Now run digest as a human would
-    result = runner.invoke(cli.app, ["digest"])
-    assert result.exit_code == 0, result.output
-
-    # The digest output should mention the job added before daily ran
-    # (the exact phrasing depends on the digest content, but it should not be empty)
-    assert "Nothing new" not in result.output or initial_job_id == 1
-    # More directly: the audit log should show the daily's scoring, then the digest
-    # from the human run, with only one "digest" entry (the human one)
     digest_entries = [e for e in store.audit_entries(limit=100) if e["action"] == "digest"]
-    assert len(digest_entries) == 1, "Only the human-run digest should be recorded"
+    assert digest_entries == [], "daily must not record a digest read"
+
+    result = runner.invoke(cli.app, ["digest", "--json", "--no-record"])
+    assert result.exit_code == 0, result.output
+    payload = json.loads(result.output)
+    assert "no previous digest" in payload["since_source"]
