@@ -926,12 +926,26 @@ def _print_entries(entries: list[Any], title: str) -> None:
 def digest(
     since: int = typer.Option(1, "--since", help="Fallback window when no digest has run."),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+    no_record: bool = typer.Option(
+        False, "--no-record", help="Print the digest without marking it read."
+    ),
 ) -> None:
     """The reading queue: new, moved, reposted, and what the filters ate (#32).
 
     Meant for ten minutes over coffee, so every section is capped. Running it
     records that you looked, which is what makes the next run's "new" mean
     "since you last read this" rather than "in the last day".
+    """
+    _print_digest(since, as_json, record=not no_record)
+
+
+def _print_digest(since: int, as_json: bool, *, record: bool) -> None:
+    """The digest itself, callable from Python with plain arguments.
+
+    `daily` needs it with `record=False`. Calling the `digest` command function
+    directly would hand an omitted option Typer's `OptionInfo` default, which is
+    truthy -- so "don't record" would silently become the default for any caller
+    that forgot the argument. A plain keyword-only bool leaves no default to trip on.
     """
     from jobagent.tracking.digest import build as build_digest
 
@@ -948,7 +962,8 @@ def digest(
             last_run=store.last_audit("digest"),
             fallback_days=since,
         )
-        store.append_audit("digest", {"new": len(result.new), "moved": len(result.moved)})
+        if record:
+            store.append_audit("digest", {"new": len(result.new), "moved": len(result.moved)})
 
     if as_json:
         console.print_json(data=result.as_dict())
@@ -1098,7 +1113,10 @@ def daily(
         scored = _score_everything(repo, profile, store)
 
     console.print(f"[dim]extracted {extracted}, scored {scored}[/dim]")
-    digest(since=1, as_json=False)
+    # An unattended run counting as the owner reading the digest breaks "new since you
+    # last looked" silently. No record means the digest is printed and logged but does
+    # not reset the baseline for the next human run.
+    _print_digest(1, False, record=False)
 
     if failures:
         console.print(f"\n[yellow]{len(failures)} source(s) failed:[/yellow] {'; '.join(failures)}")
