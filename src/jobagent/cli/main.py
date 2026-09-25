@@ -1,11 +1,13 @@
 """CLI entry point.
 
-The full command surface lands in #26 (Day 2). Day 1 ships only what proves the
-foundation works: initialise the data directory, show status, read the audit log.
+Global options live on the root callback so every command answers to the same
+flags. The rest of #26 -- ``--json`` beyond ``shortlist``/``digest``/``list``, ``--verbose``,
+and documented exit codes -- is still outstanding.
 """
 
 from __future__ import annotations
 
+import os
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -14,11 +16,17 @@ import typer
 from rich.console import Console
 from rich.table import Table
 
+from jobagent import __version__
 from jobagent.application.answers import standing_answers
 from jobagent.application.package import build as build_package
 from jobagent.application.resume import load as load_resume
 from jobagent.application.tailor import Posting
-from jobagent.core.paths import default_data_dir, ensure_data_dir
+from jobagent.core.paths import (
+    ENV_DATA_DIR,
+    default_data_dir,
+    ensure_data_dir,
+    is_inside_repository,
+)
 from jobagent.core.pii import REGISTRY
 from jobagent.core.profile import Profile
 from jobagent.core.profile import load as load_stored_profile
@@ -53,6 +61,54 @@ LIST_JSON_FIELDS: tuple[str, ...] = (
     "state",
     "snoozed_until",
 )
+
+
+def _repository_root(start: Path) -> Path | None:
+    """The working tree containing ``start``, or None when there is no repository."""
+    for candidate in (start, *start.parents):
+        if (candidate / ".git").exists():
+            return candidate
+    return None
+
+
+def _version(value: bool) -> None:
+    if value:
+        console.print(f"jobagent {__version__}")
+        raise typer.Exit
+
+
+@app.callback()
+def global_options(
+    data_dir: Path = typer.Option(
+        None,
+        "--data-dir",
+        help="Where the dossier lives. Defaults to $JOBAGENT_DATA_DIR, then the "
+        "platform data directory.",
+    ),
+    _version_flag: bool = typer.Option(
+        False,
+        "--version",
+        help="Print the version and exit.",
+        callback=_version,
+        is_eager=True,
+    ),
+) -> None:
+    """Options every command honours."""
+    if data_dir is None:
+        return
+
+    target = data_dir.expanduser().resolve()
+    repo_root = _repository_root(Path.cwd())
+    if repo_root is not None and is_inside_repository(target, repo_root):
+        # Rule 3: the dossier stays out of the working tree. The default already
+        # guarantees that; a flag is the one way to point it back in by hand.
+        console.print(f"[red]Refusing[/red] a data directory inside the repository: {target}")
+        console.print("The dossier stays outside the working tree -- see docs/adr/0003.")
+        raise typer.Exit(2)
+
+    # paths.default_data_dir() is the single place the location is resolved, so
+    # the flag feeds it rather than growing a second resolution path.
+    os.environ[ENV_DATA_DIR] = str(target)
 
 
 @app.command()
