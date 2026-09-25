@@ -42,13 +42,13 @@ fi
 
 LOG_FILE="$DATA_DIR/jobagent-daily.log"
 
-# Build the --source arguments from JOBAGENT_DAILY_SOURCES.
-# If unset or empty, default to the standard Workday tenants.
-if [[ -n "$JOBAGENT_DAILY_SOURCES" ]]; then
-    # Split the space-separated source list into an array, preserving quotes.
-    read -ra SOURCES <<<"$JOBAGENT_DAILY_SOURCES"
-else
-    # Default sources: RBC, BMO, and TD Workday tenants
+# Build the --source arguments from JOBAGENT_DAILY_SOURCES, a whitespace-separated
+# list of `jobagent fetch` source names. Source names never contain spaces, so a
+# plain split is enough. Unset, empty, or only whitespace all mean the defaults:
+# a run with no sources would fetch nothing and look like a quiet day.
+SOURCES=()
+read -ra SOURCES <<<"${JOBAGENT_DAILY_SOURCES:-}"
+if [[ ${#SOURCES[@]} -eq 0 ]]; then
     SOURCES=("workday:rbc" "workday:bmo" "workday:td")
 fi
 
