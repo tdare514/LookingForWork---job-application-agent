@@ -926,6 +926,7 @@ def _print_entries(entries: list[Any], title: str) -> None:
 def digest(
     since: int = typer.Option(1, "--since", help="Fallback window when no digest has run."),
     as_json: bool = typer.Option(False, "--json", help="Machine-readable output."),
+    no_record: bool = typer.Option(False, "--no-record", help="Build digest without recording."),
 ) -> None:
     """The reading queue: new, moved, reposted, and what the filters ate (#32).
 
@@ -948,7 +949,8 @@ def digest(
             last_run=store.last_audit("digest"),
             fallback_days=since,
         )
-        store.append_audit("digest", {"new": len(result.new), "moved": len(result.moved)})
+        if not no_record:
+            store.append_audit("digest", {"new": len(result.new), "moved": len(result.moved)})
 
     if as_json:
         console.print_json(data=result.as_dict())
@@ -1098,7 +1100,10 @@ def daily(
         scored = _score_everything(repo, profile, store)
 
     console.print(f"[dim]extracted {extracted}, scored {scored}[/dim]")
-    digest(since=1, as_json=False)
+    # An unattended run counting as the owner reading the digest breaks "new since you
+    # last looked" silently. No record means the digest is printed and logged but does
+    # not reset the baseline for the next human run.
+    digest(since=1, as_json=False, no_record=True)
 
     if failures:
         console.print(f"\n[yellow]{len(failures)} source(s) failed:[/yellow] {'; '.join(failures)}")
