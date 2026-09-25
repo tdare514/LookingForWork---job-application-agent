@@ -6,8 +6,10 @@
 # a file under the data directory.
 #
 # It is intended to be called by launchd via the plist at com.jobagent.daily.plist.template.
-
-set -e
+#
+# After the run completes, it posts a notification to the system showing the
+# count of new postings, or a failure message if daily exited non-zero.
+# Set JOBAGENT_NOTIFY=0 in the plist to suppress notifications.
 
 # Resolve the repo directory (the script lives at scripts/launchd/run-daily.sh)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -66,4 +68,39 @@ done
     echo "=== completed at $(date -u) ==="
 } >> "$LOG_FILE" 2>&1
 
-exit 0
+DAILY_EXIT_CODE=$?
+
+# Post a notification if enabled (default: on).
+# The notification carries counts only, never company names or job titles.
+# Lock-screen visibility of employer names is the most sensitive data this tool holds.
+if [[ "${JOBAGENT_NOTIFY:-1}" != "0" ]]; then
+    if [[ $DAILY_EXIT_CODE -eq 0 ]]; then
+        # Success: get the count of new postings from digest --no-record.
+        # We parse JSON to extract the length of the "new" list.
+        NEW_COUNT=$(python3 -m jobagent digest --json --no-record 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    print(len(data.get('new', [])))
+except (json.JSONDecodeError, KeyError, ValueError):
+    print(0)
+")
+
+        if [[ "$NEW_COUNT" -eq 0 ]]; then
+            NOTIFICATION_TEXT="Nothing new today"
+        elif [[ "$NEW_COUNT" -eq 1 ]]; then
+            NOTIFICATION_TEXT="1 new posting today"
+        else
+            NOTIFICATION_TEXT="$NEW_COUNT new postings today"
+        fi
+    else
+        # Failure: daily exited with an error.
+        NOTIFICATION_TEXT="Daily run had failures — see jobagent-daily.log"
+    fi
+
+    # Post the notification using osascript.
+    # Pass the message as an argument to avoid quoting issues.
+    osascript -e 'on run argv' -e 'display notification (item 1 of argv) with title "jobagent"' -e 'end run' "$NOTIFICATION_TEXT" 2>/dev/null || true
+fi
+
+exit $DAILY_EXIT_CODE

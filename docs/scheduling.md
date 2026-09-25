@@ -80,6 +80,32 @@ launchctl unload ~/Library/LaunchAgents/com.jobagent.daily.plist
 launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 ```
 
+## Notifications
+
+Each time the scheduled job completes, it posts a local notification to your Mac showing:
+
+- **Success:** "N new postings today" (or "Nothing new today" if there are no new postings)
+- **Failure:** "Daily run had failures — see jobagent-daily.log" (when `daily` exits non-zero)
+
+The notification carries **counts only**, never company names or job titles. This protects the most sensitive data the tool holds — the list of employers you are approaching — from appearing on your lock screen.
+
+To disable notifications, add `JOBAGENT_NOTIFY=0` to the plist environment:
+
+```xml
+<key>EnvironmentVariables</key>
+<dict>
+    <key>JOBAGENT_NOTIFY</key>
+    <string>0</string>
+</dict>
+```
+
+Then reload the job:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.jobagent.daily.plist
+launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
+```
+
 ## Monitoring
 
 ### Check the log
