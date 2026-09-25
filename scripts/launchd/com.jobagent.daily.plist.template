@@ -1,0 +1,48 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <!-- Service identifier. Must match the filename (minus .plist): com.jobagent.daily -->
+    <key>Label</key>
+    <string>com.jobagent.daily</string>
+
+    <!-- The program to run and its arguments -->
+    <key>ProgramArguments</key>
+    <array>
+        <!-- REPLACE __PATH_TO_WRAPPER_SCRIPT__ with the absolute path to scripts/launchd/run-daily.sh -->
+        <!-- Example: /Users/yourname/path/to/repo/scripts/launchd/run-daily.sh -->
+        <string>__PATH_TO_WRAPPER_SCRIPT__</string>
+    </array>
+
+    <!-- Run daily at a fixed time (10:00 AM local time) -->
+    <!-- Adjust Hour and Minute to your preference -->
+    <key>StartCalendarInterval</key>
+    <dict>
+        <key>Hour</key>
+        <integer>10</integer>
+        <key>Minute</key>
+        <integer>0</integer>
+    </dict>
+
+    <!-- Restart the job if it exits with a non-zero code -->
+    <key>KeepAlive</key>
+    <false/>
+
+    <!-- Log output to help debug failures (optional) -->
+    <!-- Uncomment to see standard output/error from the job -->
+    <!-- <key>StandardErrorPath</key>
+    <string>__PATH_TO_DATA_DIR__/jobagent-daily-stderr.log</string>
+    <key>StandardOutPath</key>
+    <string>__PATH_TO_DATA_DIR__/jobagent-daily-stdout.log</string> -->
+
+    <!-- Run as the current user (not as root) -->
+    <!-- launchd will use the user who loaded the plist -->
+    <key>RunAtLoad</key>
+    <false/>
+
+    <!-- Set a reasonable timeout for the job (30 minutes) -->
+    <!-- If the job takes longer, it will be terminated -->
+    <key>TimeOut</key>
+    <integer>1800</integer>
+</dict>
+</plist>
