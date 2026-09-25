@@ -46,9 +46,9 @@ make schedule
 
 This will:
 - Create the runtime directory at `~/.local/share/jobagent-runtime/` (or `$JOBAGENT_RUNTIME_DIR` if set)
-- Copy the Python venv and source code to the runtime
+- Copy the Python venv, `src/` and `run-daily.sh` to the runtime, and point the venv's editable install at the copied `src/` (no `pip install`, no network; the repo's `.venv` is left as it is)
 - Create the plist file at `~/Library/LaunchAgents/com.jobagent.daily.plist`
-- Print the `launchctl` command to load the job (but not run it)
+- Print the `launchctl` commands to load the job; it never runs them
 
 The command is safe to run multiple times and is idempotent — if you have an existing plist with custom `EnvironmentVariables` or `StartCalendarInterval` settings, they are preserved.
 
@@ -135,12 +135,12 @@ tail -50 ~/.local/share/jobagent/jobagent-daily.log
 tail -f ~/.local/share/jobagent/jobagent-daily.log
 ```
 
-2. **launchd logs:** `~/Library/Logs/jobagent-daily-*.log` — captured by launchd itself (stdout and stderr).
+2. **launchd logs:** `~/Library/Logs/jobagent-daily.out.log` and `jobagent-daily.err.log` — captured by launchd itself. A job that fails before the script's own log opens (a TCC refusal, a missing runtime) only shows up here.
 
 ```bash
 # See launchd's capture of the job's output
-tail ~/Library/Logs/jobagent-daily-stdout.log
-tail ~/Library/Logs/jobagent-daily-stderr.log
+tail ~/Library/Logs/jobagent-daily.out.log
+tail ~/Library/Logs/jobagent-daily.err.log
 ```
 
 ### Check job status
@@ -190,7 +190,7 @@ launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 
 ```bash
 tail ~/.local/share/jobagent/jobagent-daily.log
-tail ~/Library/Logs/jobagent-daily-stderr.log
+tail ~/Library/Logs/jobagent-daily.err.log
 ```
 
 ### The job ran but produced no output or failed
@@ -199,7 +199,7 @@ Check both log locations:
 
 ```bash
 tail ~/.local/share/jobagent/jobagent-daily.log        # Application log
-tail ~/Library/Logs/jobagent-daily-stderr.log            # launchd stderr
+tail ~/Library/Logs/jobagent-daily.err.log              # launchd stderr
 ```
 
 Common issues:
@@ -213,7 +213,7 @@ Common issues:
 
 To change which sources are fetched, set the `JOBAGENT_DAILY_SOURCES` environment variable in the plist. This avoids editing a tracked file, which would leave your checkout dirty.
 
-Edit `~/Library/LaunchAgents/com.jobagent.daily.plist` and uncomment the `JOBAGENT_DAILY_SOURCES` line in the `EnvironmentVariables` dict. For example, to fetch from RBC, BMO, and a Greenhouse board:
+Add it to the `EnvironmentVariables` dict in `~/Library/LaunchAgents/com.jobagent.daily.plist` (with a plist editor or `PlistBuddy`); `make schedule` keeps that dict and `StartCalendarInterval` when it rewrites the plist. For example, to fetch from RBC, BMO, and a Greenhouse board:
 
 ```xml
 <key>EnvironmentVariables</key>
@@ -224,6 +224,8 @@ Edit `~/Library/LaunchAgents/com.jobagent.daily.plist` and uncomment the `JOBAGE
 ```
 
 Source names are space-separated. If `JOBAGENT_DAILY_SOURCES` is unset or empty, the default sources are used: `workday:rbc workday:bmo workday:td`.
+
+`JOBAGENT_DAILY_LIMIT` (default `50`) is passed to `daily` as `--limit`, the postings kept per source.
 
 **Note on Greenhouse sources:** Greenhouse sources are referenced by their board slug (e.g. `greenhouse:stripe` for Stripe's board). Since `jobagent daily` has no `--company` flag, the daily output uses the title-cased slug as the company name (e.g. "Stripe" for `greenhouse:stripe`).
 

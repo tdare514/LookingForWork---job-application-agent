@@ -5,19 +5,24 @@
 # variables, and runs `jobagent daily` with a fixed source list, logging to
 # a file under the data directory.
 #
-# It is intended to be called by launchd via the plist at com.jobagent.daily.plist.template.
+# launchd runs the copy `make schedule` installs (scripts/launchd/install.sh).
 #
 # After the run completes, it posts a notification to the system showing the
 # count of new postings, or a failure message if daily exited non-zero.
 # Set JOBAGENT_NOTIFY=0 in the plist to suppress notifications.
 
-# Resolve the repo directory (the script lives at scripts/launchd/run-daily.sh)
+# Pick the interpreter from where this script lives. `make schedule` copies it to
+# <runtime>/run-daily.sh beside <runtime>/venv, outside ~/Documents (see
+# docs/scheduling.md); run from the repo it uses the repo's .venv. The venv's
+# python is called directly: `activate` hardcodes the venv's original path.
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 REPO_DIR="$(dirname "$(dirname "$SCRIPT_DIR")")"
-
-# Activate the venv if it exists and is not already activated
-if [[ -z "$VIRTUAL_ENV" && -f "$REPO_DIR/.venv/bin/activate" ]]; then
-    source "$REPO_DIR/.venv/bin/activate"
+if [[ -x "$SCRIPT_DIR/venv/bin/python" ]]; then
+    PY="$SCRIPT_DIR/venv/bin/python"
+elif [[ -x "$REPO_DIR/.venv/bin/python" ]]; then
+    PY="$REPO_DIR/.venv/bin/python"
+else
+    PY="python3"
 fi
 
 # Set JOBAGENT_DATA_DIR if not already set.
@@ -32,14 +37,14 @@ fi
 
 # Ensure the data directory exists and is initialized.
 # This is a no-op if already initialized.
-python3 -m jobagent init 2>&1 || true
+"$PY" -m jobagent init 2>&1 || true
 
 # Determine the log file path under the data directory.
 # Use the data directory jobagent would use if not overridden.
 if [[ -n "$JOBAGENT_DATA_DIR" ]]; then
     DATA_DIR="$JOBAGENT_DATA_DIR"
 else
-    DATA_DIR="$(python3 -c 'from jobagent.core.paths import default_data_dir; print(default_data_dir())')"
+    DATA_DIR="$("$PY" -c 'from jobagent.core.paths import default_data_dir; print(default_data_dir())')"
 fi
 
 LOG_FILE="$DATA_DIR/jobagent-daily.log"
@@ -60,6 +65,10 @@ for source in "${SOURCES[@]}"; do
     DAILY_ARGS+=(--source "$source")
 done
 
+# Postings kept per source. fetch pre-filters before this limit, so it caps
+# relevant postings, not the board's first N.
+DAILY_ARGS+=(--limit "${JOBAGENT_DAILY_LIMIT:-50}")
+
 # Append to the log file with timestamp.
 # Redirect both stdout and stderr to the log.
 # The exit code is captured inside the block: a `{ ...; }` group's status is its
@@ -68,7 +77,7 @@ done
 DAILY_EXIT_CODE=0
 {
     echo "=== jobagent daily run at $(date -u) ==="
-    python3 -m jobagent daily "${DAILY_ARGS[@]}" || DAILY_EXIT_CODE=$?
+    "$PY" -m jobagent daily "${DAILY_ARGS[@]}" || DAILY_EXIT_CODE=$?
     echo "=== completed at $(date -u) with exit code $DAILY_EXIT_CODE ==="
 } >> "$LOG_FILE" 2>&1
 
@@ -81,7 +90,7 @@ if [[ "${JOBAGENT_NOTIFY:-1}" != "0" ]]; then
         # mark the queue as seen (#98). "New" means since the owner last ran
         # `jobagent digest`, not since today, so the text says that. A digest that
         # can't be read is reported as such rather than as a quiet day.
-        NEW_COUNT=$(python3 -m jobagent digest --json --no-record 2>/dev/null | python3 -c "
+        NEW_COUNT=$("$PY" -m jobagent digest --json --no-record 2>/dev/null | "$PY" -c "
 import sys, json
 try:
     print(len(json.load(sys.stdin)['new']))
