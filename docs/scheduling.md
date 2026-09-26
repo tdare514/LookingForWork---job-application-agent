@@ -92,6 +92,25 @@ launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 
 You must reload the plist after refreshing the runtime so launchd picks up any path changes.
 
+### 5. Wake the Mac before the job (optional)
+
+launchd does not wake a sleeping Mac. A job whose time passes during sleep
+runs once when the Mac next wakes, and a Mac that is shut down misses it. To
+have the run happen on time, schedule a wake a few minutes before it with
+`pmset`, once, by hand. It needs `sudo`, so no script here does it:
+
+```bash
+# Every day at 09:55, five minutes before the default 10:00 job.
+sudo pmset repeat wakeorpoweron MTWRFSU 09:55:00
+pmset -g sched                  # confirm it is scheduled
+sudo pmset repeat cancel        # remove it again
+```
+
+Match the time to `StartCalendarInterval` if you changed it. `pmset` keeps
+one repeating schedule, so this replaces any repeat set earlier. A laptop
+needs to be on power to be powered on. It may also go back to sleep before a
+long run finishes, so check the log's `completed` line the first few days.
+
 ## Notifications
 
 Each time the scheduled job completes, it posts a local notification to your Mac showing:
