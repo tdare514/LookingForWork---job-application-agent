@@ -2,6 +2,14 @@
 
 This document explains how to run `jobagent daily` on a schedule on macOS using launchd.
 
+## Why a separate runtime?
+
+macOS privacy protection (TCC) prevents background jobs from reading protected folders like `~/Documents`, `~/Desktop`, and `~/Downloads`, even if the running user owns those folders. The repository and its Python virtual environment live under `~/Documents`, so a launchd job calling `./scripts/launchd/run-daily.sh` would fail with exit code 126.
+
+The solution is to build a separate runtime outside protected folders at `~/.local/share/jobagent-runtime/` (or a custom location via `JOBAGENT_RUNTIME_DIR`). The runtime contains a copy of the venv and source code. The launchd job runs from there and bypasses the TCC restriction.
+
+This is handled automatically by `make schedule` — you do not need to understand the details. Running `make schedule` after every `git pull` refreshes the runtime to the current code.
+
 ## What it does
 
 The launchd job runs `jobagent daily` once per day, which:
@@ -28,57 +36,61 @@ jobagent sync --yes       # actually send it
 
 ## Installation
 
-### 1. Set up the wrapper script
+### 1. Install the runtime
 
-Make the wrapper script executable:
-
-```bash
-chmod +x scripts/launchd/run-daily.sh
-```
-
-### 2. Create the plist file
-
-Copy the template and fill in the placeholders:
+From the repository root, run:
 
 ```bash
-# Copy the template to ~/Library/LaunchAgents (the standard location for user-owned jobs)
-cp scripts/launchd/com.jobagent.daily.plist.template \
-   ~/Library/LaunchAgents/com.jobagent.daily.plist
+make schedule
 ```
 
-Edit `~/Library/LaunchAgents/com.jobagent.daily.plist` and replace:
+This will:
+- Create the runtime directory at `~/.local/share/jobagent-runtime/` (or `$JOBAGENT_RUNTIME_DIR` if set)
+- Copy the Python venv, `src/` and `run-daily.sh` to the runtime, and point the venv's editable install at the copied `src/` (no `pip install`, no network; the repo's `.venv` is left as it is)
+- Create the plist file at `~/Library/LaunchAgents/com.jobagent.daily.plist`
+- Print the `launchctl` commands to load the job; it never runs them
 
-- `__PATH_TO_WRAPPER_SCRIPT__` with the absolute path to `scripts/launchd/run-daily.sh` in your repository.  
-  Example: `/Users/yourname/path/to/job-agent/scripts/launchd/run-daily.sh`
+The command is safe to run multiple times and is idempotent — if you have an existing plist with custom `EnvironmentVariables` or `StartCalendarInterval` settings, they are preserved.
 
-The comment in the template also shows how to set `__PATH_TO_DATA_DIR__` if you uncomment the logging directives (optional).
+### 2. Load the job
 
-### 3. Load the job
-
-Tell launchd to load and start the job:
+After running `make schedule`, load the job as instructed:
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 ```
 
-The job will run at 10:00 AM every day by default. To change the time, edit the `StartCalendarInterval` section in the plist:
+The job will run at 10:00 AM every day by default.
 
-```xml
-<key>StartCalendarInterval</key>
-<dict>
-    <key>Hour</key>
-    <integer>10</integer>      <!-- Change this -->
-    <key>Minute</key>
-    <integer>0</integer>       <!-- Or this -->
-</dict>
+### 3. Customize the schedule (optional)
+
+To change the run time, edit the plist:
+
+```bash
+# Edit the time in StartCalendarInterval
+/usr/libexec/PlistBuddy -c "Set StartCalendarInterval:Hour 14" ~/Library/LaunchAgents/com.jobagent.daily.plist
 ```
 
-Then reload:
+Then reload the job:
 
 ```bash
 launchctl unload ~/Library/LaunchAgents/com.jobagent.daily.plist
 launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 ```
+
+Or use your favorite plist editor to change the time directly in the file.
+
+### 4. Refresh after updates
+
+After pulling new code, refresh the runtime to pick up changes:
+
+```bash
+make schedule
+launchctl unload ~/Library/LaunchAgents/com.jobagent.daily.plist
+launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
+```
+
+You must reload the plist after refreshing the runtime so launchd picks up any path changes.
 
 ## Notifications
 
@@ -109,9 +121,11 @@ launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 
 ## Monitoring
 
-### Check the log
+### Check the logs
 
-The job appends to `$JOBAGENT_DATA_DIR/jobagent-daily.log` (usually `~/.local/share/jobagent/jobagent-daily.log`).
+The job appends output to two places:
+
+1. **Application log:** `~/.local/share/jobagent/jobagent-daily.log` — the log file written by the script itself, with timestamps and output from `jobagent daily`.
 
 ```bash
 # See the last 50 lines
@@ -119,6 +133,14 @@ tail -50 ~/.local/share/jobagent/jobagent-daily.log
 
 # Follow the log in real-time (run this before the scheduled time and wait)
 tail -f ~/.local/share/jobagent/jobagent-daily.log
+```
+
+2. **launchd logs:** `~/Library/Logs/jobagent-daily.out.log` and `jobagent-daily.err.log` — captured by launchd itself. A job that fails before the script's own log opens (a TCC refusal, a missing runtime) only shows up here.
+
+```bash
+# See launchd's capture of the job's output
+tail ~/Library/Logs/jobagent-daily.out.log
+tail ~/Library/Logs/jobagent-daily.err.log
 ```
 
 ### Check job status
@@ -131,18 +153,6 @@ launchctl list | grep jobagent
 launchctl print user/$(id -u)/com.jobagent.daily
 ```
 
-### Enable stdout/stderr logging (optional)
-
-The plist template includes commented-out `StandardOutPath` and `StandardErrorPath` directives. Uncomment them if you want launchd itself to log stdout/stderr in addition to the log file the wrapper script creates:
-
-```xml
-<key>StandardErrorPath</key>
-<string>~/.local/share/jobagent/jobagent-daily-stderr.log</string>
-<key>StandardOutPath</key>
-<string>~/.local/share/jobagent/jobagent-daily-stdout.log</string>
-```
-
-Then reload the job.
 
 ## Uninstalling
 
@@ -157,10 +167,11 @@ rm ~/Library/LaunchAgents/com.jobagent.daily.plist
 
 ### The job is not running
 
-1. Check that the plist file is installed and has the correct label:
+1. Check that the plist file is installed:
 
 ```bash
 ls -la ~/Library/LaunchAgents/com.jobagent.daily.plist
+plutil -lint ~/Library/LaunchAgents/com.jobagent.daily.plist
 ```
 
 2. Check that launchd loaded it:
@@ -169,31 +180,40 @@ ls -la ~/Library/LaunchAgents/com.jobagent.daily.plist
 launchctl list | grep com.jobagent.daily
 ```
 
-If it is not there, you may need to reload it:
+If it is not there, reload it:
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.jobagent.daily.plist
 ```
 
-### The job ran but produced no output
-
-Check the log file:
+3. Check the logs:
 
 ```bash
 tail ~/.local/share/jobagent/jobagent-daily.log
+tail ~/Library/Logs/jobagent-daily.err.log
+```
+
+### The job ran but produced no output or failed
+
+Check both log locations:
+
+```bash
+tail ~/.local/share/jobagent/jobagent-daily.log        # Application log
+tail ~/Library/Logs/jobagent-daily.err.log              # launchd stderr
 ```
 
 Common issues:
 
-- **Path in plist is wrong:** Verify that `__PATH_TO_WRAPPER_SCRIPT__` is an absolute path and points to an executable file.
-- **venv not found:** The wrapper script looks for `.venv/bin/activate` relative to the repository root. If you use a different venv location, edit the script.
+- **Runtime not found:** The runtime at `~/.local/share/jobagent-runtime/` may be stale after a git pull. Re-run `make schedule` and reload the job.
+- **Permission denied:** The runtime paths need to be readable by the current user. Check that `~/.local/share/jobagent-runtime/` exists and is owned by you.
 - **Source failed with 401/403:** One of the job sources (RBC, BMO, or TD) declined the request. This is normal and `daily` will continue with the other sources and print a summary. Check the log for details.
+- **Import error:** If the Python import fails, re-run `make schedule` to refresh the runtime with the current code and plist.
 
 ### Configuring sources
 
 To change which sources are fetched, set the `JOBAGENT_DAILY_SOURCES` environment variable in the plist. This avoids editing a tracked file, which would leave your checkout dirty.
 
-Edit `~/Library/LaunchAgents/com.jobagent.daily.plist` and uncomment the `JOBAGENT_DAILY_SOURCES` line in the `EnvironmentVariables` dict. For example, to fetch from RBC, BMO, and a Greenhouse board:
+Add it to the `EnvironmentVariables` dict in `~/Library/LaunchAgents/com.jobagent.daily.plist` (with a plist editor or `PlistBuddy`); `make schedule` keeps that dict and `StartCalendarInterval` when it rewrites the plist. For example, to fetch from RBC, BMO, and a Greenhouse board:
 
 ```xml
 <key>EnvironmentVariables</key>
@@ -204,6 +224,8 @@ Edit `~/Library/LaunchAgents/com.jobagent.daily.plist` and uncomment the `JOBAGE
 ```
 
 Source names are space-separated. If `JOBAGENT_DAILY_SOURCES` is unset or empty, the default sources are used: `workday:rbc workday:bmo workday:td`.
+
+`JOBAGENT_DAILY_LIMIT` (default `50`) is passed to `daily` as `--limit`, the postings kept per source.
 
 **Note on Greenhouse sources:** Greenhouse sources are referenced by their board slug (e.g. `greenhouse:stripe` for Stripe's board). Since `jobagent daily` has no `--company` flag, the daily output uses the title-cased slug as the company name (e.g. "Stripe" for `greenhouse:stripe`).
 

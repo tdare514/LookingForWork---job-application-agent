@@ -2,10 +2,13 @@
 # belong to a different Python and will disagree with CI.
 PY ?= python3
 
-.PHONY: check lint format typecheck test context install hooks
+.PHONY: check lint format typecheck test context install hooks schedule
 
 install:
 	$(PY) -m pip install -e ".[dev]"
+
+schedule:
+	bash scripts/launchd/install.sh
 
 check: lint typecheck test context
 
