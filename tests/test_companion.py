@@ -17,6 +17,7 @@ import pytest
 from typer.testing import CliRunner
 
 from jobagent.cli import main as cli
+from jobagent.cli.exit_codes import ExitCode
 from jobagent.companion import client as companion
 from jobagent.companion.client import CompanionClient, CompanionConfig, gate_is_on
 from jobagent.companion.contract import FROM_BOARD, HOSTED_ONLY, IDENTIFIERS
@@ -134,7 +135,7 @@ def test_refuses_when_the_access_gate_is_off(fake: FakeCompanion) -> None:
     fake.gate = False
     _board(("Example North", "Analyst", State.READY))
     result = _sync("--yes")
-    assert result.exit_code == 1
+    assert result.exit_code == ExitCode.AGENT_FAILURE
     assert "not the Cloudflare Access login" in result.output
     assert fake.posts == []
 
@@ -201,7 +202,7 @@ def test_both_sides_changed_is_a_conflict_and_neither_is_overwritten(fake: FakeC
     with Storage() as store:
         BoardRepo(store).set_state(job_id, State.APPLIED)
     result = _sync("--yes")
-    assert result.exit_code == 1
+    assert result.exit_code == ExitCode.AGENT_FAILURE
     assert "conflict" in result.output
     assert _state(job_id) == "applied"
     assert fake.rows[str(job_id)]["status"] == "skipped"
@@ -242,7 +243,7 @@ def test_half_a_configuration_is_refused(monkeypatch: pytest.MonkeyPatch, data_d
     ):
         monkeypatch.delenv(name, raising=False)
     result = _sync()
-    assert result.exit_code == 1
+    assert result.exit_code == ExitCode.USER_ERROR
     assert "JOBAGENT_SYNC_TOKEN" in result.output
 
 
@@ -283,7 +284,7 @@ def test_purge_stops_before_deleting_anything_if_the_hosted_copy_is_unreachable(
     _board(("Example North", "Analyst", State.READY))
     fake.gate = False
     result = _purge("--yes")
-    assert result.exit_code == 1
+    assert result.exit_code == ExitCode.AGENT_FAILURE
     assert "Nothing was deleted" in result.output
     assert data_dir.exists()
     assert not fake.purged
@@ -311,6 +312,6 @@ def test_purge_without_a_companion_is_local_only(
 
 def test_purge_without_yes_names_the_hosted_copy(fake: FakeCompanion) -> None:
     result = _purge()
-    assert result.exit_code == 1
+    assert result.exit_code == ExitCode.USER_ERROR
     assert URL in result.output
     assert not fake.purged
