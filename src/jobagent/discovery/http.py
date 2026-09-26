@@ -17,11 +17,14 @@ Two hard rules, both from docs/architecture.md:
 
 from __future__ import annotations
 
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
+
+logger = logging.getLogger(__name__)
 
 # Identifies the tool and gives an operator something to contact. A client that
 # hides what it is has already decided it is doing something it should not.
@@ -112,15 +115,32 @@ class PoliteClient:
 
     def _request(self, method: str, url: str, **kwargs: Any) -> Any:
         host = self._check_host(url)
+        path = httpx.URL(url).path
         last_error: Exception | None = None
 
         for attempt in range(self.max_retries + 1):
             self.limiter.wait(host)
+            start = time.monotonic()
             try:
                 response = self._client.request(method, url, **kwargs)
             except httpx.HTTPError as exc:  # network-level
+                # The class name only: an httpx message can carry the full URL.
+                logger.debug(
+                    "%s %s%s %s attempt=%d", method, host, path, type(exc).__name__, attempt
+                )
                 last_error = exc
                 continue
+
+            elapsed_ms = int((time.monotonic() - start) * 1000)
+            logger.debug(
+                "%s %s%s %d %dms attempt=%d",
+                method,
+                host,
+                path,
+                response.status_code,
+                elapsed_ms,
+                attempt,
+            )
 
             if response.status_code in DECLINED:
                 # Do not retry, do not vary the user agent, do not route around.

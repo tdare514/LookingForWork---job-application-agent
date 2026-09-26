@@ -55,6 +55,13 @@ day-by-day schedule and what was cut to fit the window.
 5. **Small surface.** Four months is the budget. Features that do not move an
    application closer to a human recruiter do not ship.
 
+## Debugging
+
+`jobagent --verbose <command>` writes one line per HTTP request to stderr
+(method, host, path, status, time). It never logs headers, bodies or query
+strings, so no token appears there. stdout is unchanged, so `--json` still
+parses.
+
 ## Exit codes
 
 Every command exits with a code that indicates the type of outcome. Scripts and

@@ -15,7 +15,9 @@ Credentials come from the environment, never a file or the database:
 from __future__ import annotations
 
 import json
+import logging
 import os
+import time
 from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -24,6 +26,8 @@ from urllib.parse import urlsplit
 import httpx
 
 from jobagent.discovery.http import USER_AGENT
+
+logger = logging.getLogger(__name__)
 
 ENV_URL = "JOBAGENT_COMPANION_URL"
 ENV_TOKEN = "JOBAGENT_SYNC_TOKEN"
@@ -156,9 +160,13 @@ class CompanionClient:
     def _call(
         self, method: str, path: str, body: dict[str, Any] | None = None, **params: str
     ) -> httpx.Response:
+        start = time.monotonic()
         response = self._http.request(
             method, path, json=body, params=params or None, headers=self._authorised()
         )
+        elapsed_ms = int((time.monotonic() - start) * 1000)
+        # The path only: params, headers and the body stay out of the log.
+        logger.debug("%s %s %d %dms", method, path, response.status_code, elapsed_ms)
         if response.status_code in (301, 302, 303, 307, 308):
             raise CompanionError("the Access service token was not accepted (redirected to login)")
         return response

@@ -1,13 +1,15 @@
 """CLI entry point.
 
 Global options live on the root callback so every command answers to the same
-flags. The rest of #26 -- ``--json`` beyond ``shortlist``/``digest``/``list``, ``--verbose``,
-and documented exit codes -- is still outstanding.
+flags. The rest of #26 -- ``--json`` beyond ``shortlist``/``digest``/``list``
+and ``--config`` -- is still outstanding.
 """
 
 from __future__ import annotations
 
+import logging
 import os
+import sys
 from datetime import date
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -78,6 +80,27 @@ def _version(value: bool) -> None:
         raise typer.Exit
 
 
+_VERBOSE_HANDLER = "jobagent-verbose"
+
+
+def _log_to_stderr() -> None:
+    """DEBUG lines to stderr, so ``--json`` on stdout stays parseable.
+
+    Replaces its own handler rather than adding a second, so a process that
+    runs the app twice does not print every line twice. What is logged is the
+    call sites' business: method, host, path, status and timing, never headers,
+    bodies or query strings.
+    """
+    logger = logging.getLogger("jobagent")
+    for existing in [h for h in logger.handlers if h.get_name() == _VERBOSE_HANDLER]:
+        logger.removeHandler(existing)
+    handler = logging.StreamHandler(sys.stderr)
+    handler.set_name(_VERBOSE_HANDLER)
+    handler.setFormatter(logging.Formatter("%(message)s"))
+    logger.addHandler(handler)
+    logger.setLevel(logging.DEBUG)
+
+
 @app.callback()
 def global_options(
     data_dir: Path = typer.Option(
@@ -85,6 +108,13 @@ def global_options(
         "--data-dir",
         help="Where the dossier lives. Defaults to $JOBAGENT_DATA_DIR, then the "
         "platform data directory.",
+    ),
+    verbose: bool = typer.Option(
+        False,
+        "--verbose",
+        "-v",
+        help="Log each HTTP request (method, host, path, status, time) to stderr. "
+        "Never headers, bodies or query strings.",
     ),
     _version_flag: bool = typer.Option(
         False,
@@ -95,6 +125,9 @@ def global_options(
     ),
 ) -> None:
     """Options every command honours."""
+    if verbose:
+        _log_to_stderr()
+
     if data_dir is None:
         return
 
