@@ -21,6 +21,7 @@ from jobagent.application.answers import standing_answers
 from jobagent.application.package import build as build_package
 from jobagent.application.resume import load as load_resume
 from jobagent.application.tailor import Posting
+from jobagent.cli.exit_codes import ExitCode
 from jobagent.core.paths import (
     ENV_DATA_DIR,
     default_data_dir,
@@ -104,7 +105,7 @@ def global_options(
         # guarantees that; a flag is the one way to point it back in by hand.
         console.print(f"[red]Refusing[/red] a data directory inside the repository: {target}")
         console.print("The dossier stays outside the working tree -- see docs/adr/0003.")
-        raise typer.Exit(2)
+        raise typer.Exit(ExitCode.USAGE)
 
     # paths.default_data_dir() is the single place the location is resolved, so
     # the flag feeds it rather than growing a second resolution path.
@@ -133,7 +134,7 @@ def status() -> None:
     data_dir = default_data_dir()
     if not data_dir.exists():
         console.print("[yellow]Not initialised.[/yellow] Run `jobagent init`.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
 
     with Storage() as store:
         table = Table(title="jobagent status")
@@ -223,10 +224,10 @@ def resume_validate(
     except FileNotFoundError:
         console.print(f"[red]No resume at[/red] {target}")
         console.print("Start from the example: [bold]cp resume.example.yaml[/bold] " + str(target))
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
     except Exception as exc:  # pydantic/yaml errors carry the field name
         console.print(f"[red]Invalid resume[/red] at {target}:\n{exc}")
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
 
     accomplishments = resume.all_accomplishments()
     unmeasured = [a.id for a in accomplishments if a.metric is None]
@@ -262,12 +263,12 @@ def _load_profile_or_exit(path: Path | None, *, about_to_store: bool) -> Profile
     except FileNotFoundError:
         console.print(f"[red]No profile at[/red] {target}")
         console.print("Start from the example: [bold]cp profile.example.yaml[/bold] " + str(target))
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
     except Exception as exc:  # pydantic and the secret guard both name the field
         console.print(f"[red]Invalid profile[/red] at {target}:\n{exc}")
         if about_to_store:
             console.print("[dim]Nothing was stored.[/dim]")
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
 
 
 @profile_app.command("validate")
@@ -300,7 +301,7 @@ def profile_show() -> None:
     if profile is None:
         console.print("[yellow]No profile stored.[/yellow]")
         console.print("Set one with [bold]jobagent profile set <file>[/bold].")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
     _print_profile(profile, stored=True)
 
 
@@ -356,13 +357,13 @@ def draft(
     except FileNotFoundError:
         console.print(f"[red]No resume at[/red] {target}")
         console.print("Start from the example: [bold]cp resume.example.yaml[/bold] " + str(target))
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
 
     with Storage() as store:
         job = BoardRepo(store).get(job_id)
     if job is None:
         console.print(f"[red]No job {job_id} on the board.[/red]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
 
     posting = Posting(
         company=job.company,
@@ -441,7 +442,7 @@ def purge_cmd(
         hosted = companion.CompanionConfig.from_env()
     except companion.CompanionNotConfigured as exc:
         console.print(f"[red]Companion half-configured:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
+        raise typer.Exit(ExitCode.AGENT_FAILURE) from exc
 
     if not yes:
         console.print(f"This deletes everything under [bold]{data_dir}[/bold]:")
@@ -449,7 +450,7 @@ def purge_cmd(
         if hosted is not None:
             console.print(f"  and every row the hosted tracker at {hosted.url} holds.")
         console.print("Re-run with [bold]--yes[/bold] if that is what you want.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
 
     # Hosted first. Once the local dossier is gone, nothing is left to remind
     # you that a copy exists elsewhere, so a failure here stops the purge.
@@ -462,12 +463,12 @@ def purge_cmd(
             console.print(f"[red]Hosted copy not purged:[/red] {exc}")
             if not skip_hosted:
                 console.print("Nothing was deleted. Fix that, or re-run with --skip-hosted.")
-                raise typer.Exit(code=1) from exc
+                raise typer.Exit(ExitCode.AGENT_FAILURE) from exc
         else:
             if not result.get("clean"):
                 console.print(f"[red]Hosted copy survived purge:[/red] {result.get('remaining')}")
                 if not skip_hosted:
-                    raise typer.Exit(code=1)
+                    raise typer.Exit(ExitCode.AGENT_FAILURE)
             else:
                 removed = sum(result.get("removed", {}).values())
                 console.print(
@@ -488,7 +489,7 @@ def purge_cmd(
         console.print("[green]Verified: nothing recoverable remains.[/green]")
     else:
         console.print(f"[red]Survived purge:[/red] {report.remaining}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.AGENT_FAILURE)
 
 
 def _select_adapters(source: str, company: str | None, workday_all: tuple[Any, ...]) -> list[Any]:
@@ -551,13 +552,13 @@ def fetch(
         adapters = _select_adapters(source, company, WORKDAY_ALL)
     except ValueError as exc:
         console.print(f"[red]{exc}[/red]")
-        raise typer.Exit(code=1) from exc
+        raise typer.Exit(ExitCode.USER_ERROR) from exc
 
     if not adapters:
         console.print(f"[red]Unknown source[/red] {source!r}.")
         workday_sources = ", ".join(a.name for a in WORKDAY_ALL)
         console.print(f"Known Workday sources: {workday_sources}, 'all', or greenhouse:board-slug.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
 
     hosts = {h for a in adapters for h in a.hosts}
     added = skipped = deadlines_found = detail_failures = 0
@@ -741,7 +742,7 @@ def extract(
                     f"[yellow]Job {job_id} has no stored description.[/yellow] "
                     "Run `jobagent fetch <source> --details` first."
                 )
-                raise typer.Exit(code=1)
+                raise typer.Exit(ExitCode.USER_ERROR)
 
         if not targets:
             console.print("[yellow]No postings have descriptions yet.[/yellow]")
@@ -876,7 +877,7 @@ def _explain_score(repo: BoardRepo, latest: dict[int, Any], job_id: int) -> None
     job = repo.get(job_id)
     if record is None or job is None:
         console.print(f"[yellow]No score for job {job_id}.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
 
     console.print(f"\n[bold]{job.company} — {job.title}[/bold]")
     if record["filtered"]:
@@ -933,11 +934,11 @@ def import_shortlist(
         console.print(
             "Start from the example: [bold]cp shortlist.example.yaml[/bold] ~/shortlist.yaml"
         )
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
     except Exception as exc:  # pydantic and yaml both name the offending field
         console.print(f"[red]Invalid shortlist[/red] at {path}:\n{exc}")
         console.print("[dim]Nothing was written.[/dim]")
-        raise typer.Exit(code=1) from None
+        raise typer.Exit(ExitCode.USER_ERROR) from None
 
     with Storage() as store:
         repo = BoardRepo(store)
@@ -983,7 +984,7 @@ def _profile_or_exit(store: Storage) -> Profile:
     if profile is None:
         console.print("[yellow]No profile set.[/yellow] Every filter and weight reads it.")
         console.print("Run [bold]jobagent profile set <file.yaml>[/bold] first.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
     return profile
 
 
@@ -1188,7 +1189,7 @@ def skip(
         job = repo.get(job_id)
         if job is None:
             console.print(f"[yellow]No job {job_id}.[/yellow]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(ExitCode.USER_ERROR)
         repo.set_state(job_id, State.SKIPPED, reason=reason)
     console.print(f"[dim]○[/dim] Skipped: {job.company} — {job.title}")
     console.print(f"  [dim]{reason}[/dim]")
@@ -1208,14 +1209,14 @@ def snooze(
 
     if days < 1:
         console.print("[yellow]--days must be at least 1.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
     until = date.today() + timedelta(days=days)
     with Storage() as store:
         repo = BoardRepo(store)
         job = repo.get(job_id)
         if job is None:
             console.print(f"[yellow]No job {job_id}.[/yellow]")
-            raise typer.Exit(code=1)
+            raise typer.Exit(ExitCode.USER_ERROR)
         repo.snooze(job_id, until)
     console.print(f"[dim]💤 {job.company} — {job.title}[/dim]")
     console.print(f"  back on {until.isoformat()}")
@@ -1277,7 +1278,7 @@ def daily(
 
     if failures:
         console.print(f"\n[yellow]{len(failures)} source(s) failed:[/yellow] {'; '.join(failures)}")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.AGENT_FAILURE)
 
 
 @app.command()
@@ -1389,7 +1390,7 @@ def board() -> None:
     data_dir = default_data_dir()
     if not data_dir.exists():
         console.print("[yellow]Not initialised.[/yellow] Run `jobagent init`.")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
     from jobagent.tracking.app import run
 
     run()
@@ -1520,7 +1521,7 @@ def sync_cmd(
                 if the_plan.empty:
                     console.print("Already in agreement.")
                     if the_plan.conflicts:
-                        raise typer.Exit(code=1)
+                        raise typer.Exit(ExitCode.AGENT_FAILURE)
                     return
 
                 outcome = run_sync(
@@ -1543,7 +1544,7 @@ def sync_cmd(
                 )
     except (companion.AccessGateOff, companion.CompanionError) as exc:
         console.print(f"[red]Not synced:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
+        raise typer.Exit(ExitCode.AGENT_FAILURE) from exc
 
     console.print(
         f"[green]Synced.[/green] Sent {outcome.pushed}, took {outcome.pulled} from the phone, "
@@ -1551,7 +1552,7 @@ def sync_cmd(
     )
     if outcome.conflicts:
         console.print(f"[yellow]{len(outcome.conflicts)} conflict(s) left for you.[/yellow]")
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.AGENT_FAILURE)
 
 
 def _companion_config_or_exit(companion: Any) -> Any:
@@ -1559,13 +1560,13 @@ def _companion_config_or_exit(companion: Any) -> Any:
         config = companion.CompanionConfig.from_env()
     except companion.CompanionNotConfigured as exc:
         console.print(f"[red]Companion half-configured:[/red] {exc}")
-        raise typer.Exit(code=1) from exc
+        raise typer.Exit(ExitCode.USER_ERROR) from exc
     if config is None:
         console.print(
             "No hosted companion configured. Set JOBAGENT_COMPANION_URL, JOBAGENT_SYNC_TOKEN, "
             "JOBAGENT_ACCESS_CLIENT_ID and JOBAGENT_ACCESS_CLIENT_SECRET (cloudflare/README.md)."
         )
-        raise typer.Exit(code=1)
+        raise typer.Exit(ExitCode.USER_ERROR)
     return config
 
 

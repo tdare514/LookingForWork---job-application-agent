@@ -54,3 +54,21 @@ day-by-day schedule and what was cut to fit the window.
 4. **Reversible.** Every stored byte can be exported or deleted with one command.
 5. **Small surface.** Four months is the budget. Features that do not move an
    application closer to a human recruiter do not ship.
+
+## Exit codes
+
+Every command exits with a code that indicates the type of outcome. Scripts and
+operators can branch on these codes to distinguish user error from agent failure.
+
+| Code | Name | Meaning |
+| --- | --- | --- |
+| 0 | `OK` | Successful execution. |
+| 1 | `USER_ERROR` | User-caused failure: bad input, unknown id or source, missing profile, bad flag value. |
+| 2 | `USAGE` | POSIX usage error: bad flag or missing required argument. |
+| 3 | `AGENT_FAILURE` | Agent failure: a source declined, a truthfulness check failed, a companion error. |
+| 4 | `NOTHING_TO_DO` | Command found nothing to act on (reserved for future use). |
+
+On a quiet day — nothing new, nothing to read, nothing to apply to — commands
+like `daily`, `digest`, `list`, and `shortlist` exit 0. They succeeded at their
+job, which is to report the queue. Treat any non-zero exit as a signal that
+something needs attention.
