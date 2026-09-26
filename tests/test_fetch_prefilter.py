@@ -6,6 +6,7 @@ of them; these tests hold it to the arithmetic as well as the rows.
 
 from __future__ import annotations
 
+import json
 from collections.abc import Callable
 from typing import Any
 
@@ -140,3 +141,70 @@ def test_without_a_profile_nothing_is_filtered(
 
     assert "No profile stored; fetching without the pre-filter." in output
     assert len(_board_rows(store)) == 4
+
+
+def test_workday_prefilter_stays_on_the_first_page_before_details(
+    store: Storage,
+    make_profile: Callable[..., Profile],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Workday must honor the requested limit, then fetch details only for passes."""
+    from jobagent.discovery.workday import RBC
+
+    store_profile(store, make_profile())
+    jobs = MIXED + [("Risk Analyst Intern", "San Francisco, CA")] * 16
+    page = {
+        "jobPostings": [
+            {
+                "title": title,
+                "externalPath": f"/job/{index}",
+                "locationsText": location,
+                "bulletFields": [f"req-{index}"],
+            }
+            for index, (title, location) in enumerate(jobs)
+        ],
+        "total": 1800,
+    }
+    requests: list[httpx.Request] = []
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if request.method == "POST":
+            # If a regression asks for more than the first page, stop safely;
+            # the request-count assertion below will expose the extra page.
+            if json.loads(request.content).get("offset") == 0:
+                return httpx.Response(200, json=page)
+            return httpx.Response(200, json={"jobPostings": [], "total": 1800})
+        return httpx.Response(
+            200,
+            json={"jobPostingInfo": {"jobDescription": "Role details", "endDate": ""}},
+        )
+
+    real = discovery_http.PoliteClient
+
+    def client(hosts: set[str], **_: object) -> discovery_http.PoliteClient:
+        return real(hosts, min_interval_seconds=0.0, transport=httpx.MockTransport(handler))
+
+    monkeypatch.setattr(discovery_http, "PoliteClient", client)
+    result = CliRunner().invoke(cli.app, ["fetch", RBC.name, "--details"])
+
+    assert result.exit_code == 0, result.output
+    list_requests = [request for request in requests if request.method == "POST"]
+    detail_requests = [request for request in requests if request.method == "GET"]
+    assert len(list_requests) == 1
+    assert list_requests[0].url == RBC.endpoint
+    assert json.loads(list_requests[0].content) == {
+        "appliedFacets": {},
+        "limit": 20,
+        "offset": 0,
+        "searchText": "",
+    }
+    assert {request.url.path for request in detail_requests} == {
+        "/wday/cxs/rbc/rbcearlytalent1/job/0",
+        "/wday/cxs/rbc/rbcearlytalent1/job/2",
+    }
+    assert len(detail_requests) == 2
+    assert _board_rows(store) == [
+        ("Risk Analyst Intern", ""),
+        ("Risk Analyst Intern", "Toronto, ON"),
+    ]
