@@ -55,11 +55,12 @@ class GreenhouseAdapter:
         # Greenhouse's API returns escaped HTML that must be unescaped before parsing.
         return f"https://{HOST}/v1/boards/{self.board}/jobs?content=true"
 
-    def fetch(self, client: PoliteClient, *, limit: int = 50) -> Iterable[RawPosting]:
+    def fetch(self, client: PoliteClient, *, limit: int | None = 50) -> Iterable[RawPosting]:
         body = client.get_json(self.endpoint)
         if not isinstance(body, dict):
             raise UnexpectedSchema(f"{self.name}: expected an object, got a list")
-        return self.parse_response(body)[:limit]
+        postings = self.parse_response(body)
+        return postings if limit is None else postings[:limit]
 
     def parse_response(self, body: dict[str, Any]) -> list[RawPosting]:
         if "jobs" not in body:

@@ -518,23 +518,32 @@ def fetch(
         ..., help="Adapter name: workday:rbc, greenhouse:acme, or 'all' for every tenant."
     ),
     limit: int = typer.Option(20, "--limit", "-n", help="Max postings to pull."),
-    match: str = typer.Option(None, "--match", "-m", help="Only keep titles containing this text."),
+    match: str | None = typer.Option(
+        None, "--match", "-m", help="Only keep titles containing this text."
+    ),
     details: bool = typer.Option(
         False,
         "--details",
         help="Also fetch each posting's description and closing date. One extra "
         "request per posting, so it is slower.",
     ),
-    company: str = typer.Option(
+    company: str | None = typer.Option(
         None,
         "--company",
         help="Display name for company (greenhouse only; defaults to board slug title-cased).",
+    ),
+    no_prefilter: bool = typer.Option(
+        False,
+        "--no-prefilter",
+        "--all",
+        help="Skip location and seniority pre-filtering, keep all postings up to the limit.",
     ),
 ) -> None:
     """Pull postings from a source onto the board.
 
     Nothing is applied to; rows land as `new` for you to triage.
     """
+    from jobagent.discovery.greenhouse import GreenhouseAdapter
     from jobagent.discovery.http import HostNotAllowed, PoliteClient, SourceDeclined
     from jobagent.discovery.workday import ALL as WORKDAY_ALL
 
@@ -557,9 +566,20 @@ def fetch(
         # Rows added before M0003 have no dedupe key, so they would look new
         # again on the next fetch. Idempotent, and a no-op once it has run.
         repo.backfill_normalized()
+        profile = None if no_prefilter else load_stored_profile(store)
+        if profile is None and not no_prefilter:
+            console.print("[dim]No profile stored; fetching without the pre-filter.[/dim]")
         for adapter in adapters:
             try:
-                postings = list(adapter.fetch(client, limit=limit))
+                # Greenhouse returns its whole board in one call, so with a profile
+                # it is filtered before the limit and the limit keeps the first N
+                # relevant postings. Workday pages, so it keeps the limit and the
+                # filter trims that page before the per-posting detail requests.
+                whole_board = profile is not None and isinstance(adapter, GreenhouseAdapter)
+                if whole_board:
+                    postings = list(adapter.fetch(client, limit=None))
+                else:
+                    postings = list(adapter.fetch(client, limit=limit))
             except SourceDeclined as exc:
                 # One tenant refusing says nothing about the others, so keep going.
                 console.print(f"[yellow]{adapter.name} declined:[/yellow] {exc}")
@@ -571,6 +591,13 @@ def fetch(
             except Exception as exc:  # schema drift -- loud, not silent
                 console.print(f"[red]{adapter.name} returned an unexpected shape:[/red] {exc}")
                 continue
+
+            if profile is not None:
+                considered = len(postings)
+                passed, dropped = _prefilter(postings, profile)
+                postings = passed[:limit]
+                summary = _prefilter_summary(adapter.name, considered, passed, postings, dropped)
+                console.print(f"[dim]{summary}[/dim]")
 
             kept = [p for p in postings if not match or match.lower() in p.title.lower()]
             if details and kept:
@@ -608,6 +635,60 @@ def fetch(
         )
     if added:
         console.print("Run [bold]jobagent board[/bold] to triage them.")
+
+
+def _prefilter(
+    postings: list[RawPosting], profile: Profile
+) -> tuple[list[RawPosting], dict[str, int]]:
+    """Drop postings that clearly miss the profile's locations or seniority.
+
+    Only the two existing filters, reused as they are. Both pass anything they
+    cannot judge -- no stated level, no location -- so this drops a clear
+    mismatch and nothing else. Returns what passed, in order, and the drop count
+    per rule. Dropped postings never reach the board, so the counts are the only
+    record of them.
+    """
+    from jobagent.matching.filters import Listing, location_incompatible, seniority_mismatch
+
+    passed: list[RawPosting] = []
+    dropped: dict[str, int] = {}
+    for posting in postings:
+        listing = Listing(
+            company=posting.company,
+            title=posting.title,
+            location=posting.location,
+            description=posting.description,
+        )
+        for verdict in (
+            location_incompatible(listing, profile),
+            seniority_mismatch(listing, profile),
+        ):
+            if not verdict.passed:
+                rule = verdict.rule or "unnamed"
+                dropped[rule] = dropped.get(rule, 0) + 1
+                break
+        else:
+            passed.append(posting)
+    return passed, dropped
+
+
+def _prefilter_summary(
+    source: str,
+    considered: int,
+    passed: list[RawPosting],
+    kept: list[RawPosting],
+    dropped: dict[str, int],
+) -> str:
+    """`kept 12 of 703 from greenhouse:x (dropped 640 location, 51 seniority)`.
+
+    Passed plus dropped always equals considered. When the limit then cuts the
+    passing postings, the line says so rather than folding them into "dropped".
+    """
+    cut = ", ".join(f"{count} {rule}" for rule, count in sorted(dropped.items())) or "none"
+    line = f"kept {len(passed)} of {considered} from {source} (dropped {cut})"
+    if len(kept) < len(passed):
+        line += f"; the limit takes the first {len(kept)}"
+    return line
 
 
 def _with_detail(
@@ -1164,7 +1245,9 @@ def daily(
     for name in source or []:
         console.print(f"[dim]fetching {name}…[/dim]")
         try:
-            fetch(name, limit=limit, match="", details=True)
+            # Pass all parameters explicitly: Typer OptionInfo defaults are truthy
+            # when called directly from Python, so we must not omit no_prefilter.
+            fetch(name, limit=limit, match="", details=True, company=None, no_prefilter=False)
         except typer.Exit as exc:
             if exc.exit_code:
                 failures.append(f"{name} (unknown adapter, or nothing fetched)")
