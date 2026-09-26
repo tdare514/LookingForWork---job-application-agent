@@ -84,7 +84,7 @@ the request's `Origin` to match and the `jobagent_csrf` cookie echoed in
 `/api/auth/github` starts GitHub OAuth with PKCE and an encrypted, ten-minute,
 HttpOnly transaction cookie. The callback admits only the numeric
 `OWNER_GITHUB_ID`, consumes the OAuth state whether or not it succeeds, keeps
-no GitHub token, and stores a one-day opaque session in D1. Logout revokes it.
+no GitHub token, and stores a 30-day opaque session in D1. Logout revokes it.
 
 Set as deployment variables and secrets, never in a file: `GITHUB_CLIENT_ID`,
 `GITHUB_CLIENT_SECRET`, `GITHUB_CALLBACK_URL` (exact), `OWNER_GITHUB_ID`, and

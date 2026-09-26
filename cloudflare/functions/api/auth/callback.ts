@@ -1,6 +1,6 @@
 import type { PagesFunction } from "@cloudflare/workers-types";
 import { cookie, csrfCookie, denied, open, parseCookies, randomToken } from "../../../src/auth.js";
-import { readAuthConfig } from "../../../src/config.js";
+import { SESSION_SECONDS, readAuthConfig } from "../../../src/config.js";
 
 type Env = {
   DB: D1Database;
@@ -53,12 +53,12 @@ export const onRequestGet: PagesFunction<Env> = async ({ request, env }) => {
   if (identity.id === undefined || String(identity.id) !== config.ownerGithubId) return denied();
   const sessionId = randomToken();
   const now = new Date();
-  const expires = new Date(now.getTime() + 86_400_000);
+  const expires = new Date(now.getTime() + SESSION_SECONDS * 1000);
   await env.DB.prepare("INSERT INTO owner_sessions (id, owner_github_id, created_at, expires_at) VALUES (?, ?, ?, ?)")
     .bind(sessionId, config.ownerGithubId, now.toISOString(), expires.toISOString()).run();
   const headers = new Headers({ location: "/" });
   headers.append("set-cookie", cookie("jobagent_oauth", "", 0));
-  headers.append("set-cookie", cookie("jobagent_session", sessionId, 86_400));
+  headers.append("set-cookie", cookie("jobagent_session", sessionId, SESSION_SECONDS));
   headers.append("set-cookie", csrfCookie(randomToken()));
   return new Response(null, { status: 302, headers });
 };

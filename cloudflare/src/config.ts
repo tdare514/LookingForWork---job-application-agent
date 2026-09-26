@@ -1,3 +1,5 @@
+export const SESSION_SECONDS = 30 * 86_400; // 30 days
+
 export const LIMITS = {
   maxRows: 50,
   maxBodyBytes: 16_384,

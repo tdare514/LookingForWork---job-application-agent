@@ -1,3 +1,5 @@
+import { SESSION_SECONDS } from "./config.js";
+
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
@@ -59,7 +61,7 @@ export function cookie(name: string, value: string, maxAge: number): string {
 }
 
 export function csrfCookie(value: string): string {
-  return `jobagent_csrf=${value}; Max-Age=86400; Path=/; Secure; SameSite=Lax`;
+  return `jobagent_csrf=${value}; Max-Age=${SESSION_SECONDS}; Path=/; Secure; SameSite=Lax`;
 }
 
 export const denied = (): Response =>
