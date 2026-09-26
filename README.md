@@ -63,10 +63,10 @@ operators can branch on these codes to distinguish user error from agent failure
 | Code | Name | Meaning |
 | --- | --- | --- |
 | 0 | `OK` | Successful execution. |
-| 1 | `USER_ERROR` | User-caused failure: bad input, unknown id or source, missing profile, bad flag value. |
-| 2 | `USAGE` | POSIX usage error: bad flag or missing required argument. |
-| 3 | `AGENT_FAILURE` | Agent failure: a source declined, a truthfulness check failed, a companion error. |
-| 4 | `NOTHING_TO_DO` | Command found nothing to act on (reserved for future use). |
+| 1 | `USER_ERROR` | The input is wrong: unknown job id or source, missing or invalid file, no profile stored, a half-configured companion. |
+| 2 | `USAGE` | A bad flag or missing argument (Click's own code), or a flag value the command refuses (`--data-dir` inside the repo, `snooze --days 0`). |
+| 3 | `AGENT_FAILURE` | The tool tried and could not finish: the companion refused or was unreachable, `sync` left conflicts, `purge` left data behind, or a source failed during `daily`. |
+| 4 | `NOTHING_TO_DO` | Reserved. No command uses it yet. |
 
 On a quiet day — nothing new, nothing to read, nothing to apply to — commands
 like `daily`, `digest`, `list`, and `shortlist` exit 0. They succeeded at their

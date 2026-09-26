@@ -105,6 +105,7 @@ def global_options(
         # guarantees that; a flag is the one way to point it back in by hand.
         console.print(f"[red]Refusing[/red] a data directory inside the repository: {target}")
         console.print("The dossier stays outside the working tree -- see docs/adr/0003.")
+        # A flag value the command refuses, as Click's own BadParameter would.
         raise typer.Exit(ExitCode.USAGE)
 
     # paths.default_data_dir() is the single place the location is resolved, so
@@ -442,7 +443,7 @@ def purge_cmd(
         hosted = companion.CompanionConfig.from_env()
     except companion.CompanionNotConfigured as exc:
         console.print(f"[red]Companion half-configured:[/red] {exc}")
-        raise typer.Exit(ExitCode.AGENT_FAILURE) from exc
+        raise typer.Exit(ExitCode.USER_ERROR) from exc
 
     if not yes:
         console.print(f"This deletes everything under [bold]{data_dir}[/bold]:")
@@ -1209,7 +1210,7 @@ def snooze(
 
     if days < 1:
         console.print("[yellow]--days must be at least 1.[/yellow]")
-        raise typer.Exit(ExitCode.USER_ERROR)
+        raise typer.Exit(ExitCode.USAGE)
     until = date.today() + timedelta(days=days)
     with Storage() as store:
         repo = BoardRepo(store)

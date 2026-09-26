@@ -7,24 +7,23 @@ can branch on the type of failure.
 - `USER_ERROR = 1`: user-caused failure (bad input, unknown id, missing config).
 - `USAGE = 2`: POSIX usage error (bad flag, missing required argument).
 - `AGENT_FAILURE = 3`: agent failure (source declined, companion error).
-- `NOTHING_TO_DO = 4`: command found nothing to act on (reserved for future use).
+- `NOTHING_TO_DO = 4`: reserved; no command uses it yet.
+
+AGENT_FAILURE is exercised where it happens, against a fake companion:
+`tests/test_companion.py` (the Access gate off, a sync conflict, a purge that
+cannot reach the hosted copy).
 """
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 
 from typer.testing import CliRunner
 
 from jobagent.cli import main as cli
 from jobagent.cli.exit_codes import ExitCode
-
-
-def _invoke(args: list[str]) -> int:
-    """Invoke a command and return its exit code."""
-    runner = CliRunner()
-    result = runner.invoke(cli.app, args)
-    return result.exit_code
+from jobagent.core.profile import Profile
 
 
 def test_user_error_on_unknown_job_id(data_dir: Path) -> None:
@@ -60,21 +59,6 @@ def test_user_error_on_no_profile(data_dir: Path) -> None:
     assert result.exit_code == ExitCode.USER_ERROR
 
 
-def test_agent_failure_on_source_declined(data_dir: Path) -> None:
-    """A source declining exits with AGENT_FAILURE.
-
-    Mock the fetch to simulate a source declining (403). For now, we verify
-    that unknown sources exit with USER_ERROR. Real AGENT_FAILURE from a
-    declining source is covered by test_fetch_prefilter.py.
-    """
-    runner = CliRunner()
-
-    # Verify that an unknown source exits with USER_ERROR, not AGENT_FAILURE.
-    # A real AGENT_FAILURE (from a declining source) is covered by other tests.
-    result = runner.invoke(cli.app, ["fetch", "invalid-source", "--limit", "1"])
-    assert result.exit_code == ExitCode.USER_ERROR
-
-
 def test_user_error_on_unknown_source(data_dir: Path) -> None:
     """An unknown source name exits with USER_ERROR."""
     runner = CliRunner()
@@ -89,11 +73,11 @@ def test_user_error_on_invalid_job_id_for_extract(data_dir: Path) -> None:
     assert result.exit_code == ExitCode.USER_ERROR
 
 
-def test_user_error_on_no_pattern_match(data_dir: Path) -> None:
-    """Invalid days for snooze exits with USER_ERROR."""
+def test_a_refused_flag_value_is_a_usage_error(data_dir: Path) -> None:
+    """`--days 0` is a flag value snooze refuses, which Click would call usage."""
     runner = CliRunner()
     result = runner.invoke(cli.app, ["snooze", "1", "--days", "0"])
-    assert result.exit_code == ExitCode.USER_ERROR
+    assert result.exit_code == ExitCode.USAGE
 
 
 def test_user_error_on_snooze_unknown_id(data_dir: Path) -> None:
@@ -122,14 +106,14 @@ def test_no_literal_exit_code_integers_in_cli() -> None:
             if line.strip().startswith("#"):
                 continue
             # Match typer.Exit(code=<digit>) or typer.Exit(<digit>)
-            if re.search(r"typer\.Exit\((?:code=)?\d\)", line):
+            if re.search(r"typer\.Exit\((?:code=)?\d+\)", line):
                 raise AssertionError(
                     f"{py_file.name}:{line_no} has a literal exit code: {line.strip()}"
                 )
 
 
 def test_daily_exits_zero_on_quiet_day_with_no_sources(
-    data_dir: Path, make_profile: object
+    data_dir: Path, make_profile: Callable[..., Profile]
 ) -> None:
     """The `daily` command exits 0 when run without sources (no fetch attempted).
 
@@ -140,7 +124,7 @@ def test_daily_exits_zero_on_quiet_day_with_no_sources(
     from jobagent.core.storage import Storage
 
     # Create and store a minimal profile so daily can run
-    profile = make_profile()  # type: ignore[operator]
+    profile = make_profile()
     with Storage() as store:
         store_profile(store, profile)
 
@@ -158,7 +142,7 @@ def test_list_exits_zero_on_empty_board(data_dir: Path) -> None:
 
 
 def test_shortlist_exits_zero_on_nothing_above_threshold(
-    data_dir: Path, make_profile: object
+    data_dir: Path, make_profile: Callable[..., Profile]
 ) -> None:
     """The `shortlist` command exits 0 when nothing meets the threshold.
 
@@ -167,7 +151,7 @@ def test_shortlist_exits_zero_on_nothing_above_threshold(
     from jobagent.core.profile import store as store_profile
     from jobagent.core.storage import Storage
 
-    profile = make_profile()  # type: ignore[operator]
+    profile = make_profile()
     with Storage() as store:
         store_profile(store, profile)
 
@@ -177,13 +161,13 @@ def test_shortlist_exits_zero_on_nothing_above_threshold(
 
 
 def test_digest_exits_zero_on_empty_digest(
-    data_dir: Path, make_profile: object
+    data_dir: Path, make_profile: Callable[..., Profile]
 ) -> None:
     """The `digest` command exits 0 when there is nothing new to read."""
     from jobagent.core.profile import store as store_profile
     from jobagent.core.storage import Storage
 
-    profile = make_profile()  # type: ignore[operator]
+    profile = make_profile()
     with Storage() as store:
         store_profile(store, profile)
 

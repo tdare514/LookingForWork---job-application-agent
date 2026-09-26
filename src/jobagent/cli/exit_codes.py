@@ -14,13 +14,13 @@ class ExitCode(IntEnum):
     """Successful execution."""
 
     USER_ERROR = 1
-    """User-caused failure: bad input, unknown id or source, missing config, bad flag value."""
+    """The input is wrong: unknown id or source, bad file, no profile, half a config."""
 
     USAGE = 2
-    """POSIX usage error: Click's code for a bad flag or missing required argument."""
+    """A bad flag or missing argument (Click), or a flag value a command refuses."""
 
     AGENT_FAILURE = 3
-    """Agent failure: a source declined, a truthfulness check failed, a companion error."""
+    """The tool tried and could not finish: companion refused, purge left data."""
 
     NOTHING_TO_DO = 4
     """Command was asked to act and found nothing to act on (reserved for future use)."""
