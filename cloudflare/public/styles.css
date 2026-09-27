@@ -87,6 +87,16 @@ select {
 .company { color: #53616d; margin-bottom: 0.5rem; }
 .posting-link { color: #075a91; display: inline-block; font-weight: 700; margin-top: 0.5rem; }
 .empty { color: #53616d; }
+.status-editor { display: flex; align-items: end; flex-wrap: wrap; gap: 0.75rem; margin-top: 1rem; }
+.status-editor label { flex: 1; font-size: 0.85rem; }
+.status-editor select { display: block; width: 100%; margin-top: 0.25rem; min-height: 44px; }
+.status-editor button, #refresh-board {
+  background: #123b5d; color: white; border: 0; border-radius: 0.4rem;
+  cursor: pointer; font: inherit; padding: 0.6rem 0.75rem; min-height: 44px;
+}
+.status-editor button:disabled { opacity: 0.5; cursor: default; }
+#status-feedback:empty { display: none; }
+#refresh-board { margin-bottom: 1rem; }
 .sr-only {
   clip-path: inset(50%);
   height: 1px;
