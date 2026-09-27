@@ -67,6 +67,7 @@ make install     # pip install -e ".[dev]"
 make hooks       # install the pre-commit hook
 make check       # ruff + strict mypy + pytest -- run before every push
 make format      # apply ruff formatting and safe fixes
+make phone       # deploy the phone page to the production Pages project
 
 jobagent init                       # create the data directory, apply migrations
 jobagent add -c BMO -t "Analyst" -d 2026-09-20 --ready

@@ -2,13 +2,16 @@
 # belong to a different Python and will disagree with CI.
 PY ?= python3
 
-.PHONY: check lint format typecheck test context install hooks schedule
+.PHONY: check lint format typecheck test context install hooks schedule phone
 
 install:
 	$(PY) -m pip install -e ".[dev]"
 
 schedule:
 	bash scripts/launchd/install.sh
+
+phone:
+	cd cloudflare && npm run deploy:prod
 
 check: lint typecheck test context
 
