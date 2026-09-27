@@ -10,7 +10,8 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "verify:free": "node scripts/verify-free-plan.mjs",
-    "deploy:dev": "node scripts/deploy-dev.mjs"
+    "deploy:dev": "node scripts/deploy-dev.mjs",
+    "deploy:prod": "node scripts/deploy-prod.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.0.0",

@@ -40,8 +40,16 @@ and the file names every company on the board along with where each one stands.
 
 ```sh
 JOBAGENT_DATA_DIR=... jobagent snapshot cloudflare/public/snapshot.json
-npx wrangler pages deploy cloudflare/public --project-name <your-project>
+make phone        # or: cd cloudflare && npm run deploy:prod
 ```
+
+`make phone` runs `scripts/deploy-prod.mjs`, which stages `public/`,
+`functions/` and `src/` in a temporary directory **without** `wrangler.toml`
+and deploys from there with the locked `wrangler`. The checked-in config is
+for local development and its D1 id is a placeholder; a deploy that saw it
+would replace the real binding set in the dashboard. `--dry-run` stages and
+lists without deploying. `CF_PAGES_PROJECT` overrides the project name and
+refuses anything ending in `-dev`.
 
 `jobagent snapshot` only writes the file. It never uploads: pushing is a
 deliberate human act, which is the same rule that keeps the agent from
