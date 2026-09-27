@@ -2,7 +2,7 @@
 //
 // snapshot.json and /api/ are explicitly excluded: a cached copy would survive the
 // Cloudflare Access session and sit readable in the browser afterwards.
-const CACHE = "jobagent-board-v2";
+const CACHE = "jobagent-board-v3";
 const SHELL = ["index.html", "styles.css", "app.js", "manifest.webmanifest"];
 
 self.addEventListener("install", (event) =>

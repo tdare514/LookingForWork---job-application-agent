@@ -8,7 +8,8 @@ Two things live here:
   carries* to *Local check* below is about this.
 - **The hosted companion** ([ADR 0010](../docs/adr/0010-hosted-tracker-companion.md),
   accepted): Pages Functions, a D1 database and owner-only writes. It is built
-  and tested against synthetic data only. See *Companion* at the end.
+  with a signed-in status editor. See *Companion* below; deployment status lives
+  in [STATUS.md](../STATUS.md).
 
 ## What it carries
 
@@ -121,9 +122,18 @@ local board's states. `tests/test_cloudflare_contract.py` fails if either drifts
 All SQL lives in `src/tracker.ts`, and the tests run it against node:sqlite,
 which rejects a mis-bound statement just as D1 does.
 
-Not built yet: the local sync client (nothing in `src/jobagent/` calls these
-routes), edit controls on the page, and a `purge` that reaches D1. ADR 0010
-lists these as preconditions for real data.
+### Changing status on the phone
+
+Sign in with GitHub, choose a status on a role, then tap **Save status**.
+**Saved** is the phone label for the local board's `new` state; Ready, Applied,
+Waiting, Interview, Offer, Rejected and Skipped use the same states on both sides.
+The card, Applied count and active filter update after the server confirms the save.
+Marking Applied records that you applied; it never submits anything to an employer.
+
+The editor preserves the other tracker fields and sends the current version
+and CSRF token. If the role changed elsewhere, the session expired, or a save
+cannot be confirmed, it asks you to reload before another edit. Snapshot views
+remain read-only. Changes come back to the laptop through the manual sync below.
 
 ### Laptop sync and purge
 

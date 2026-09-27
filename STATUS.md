@@ -2,7 +2,7 @@
 
 Snapshot of **now**, not a changelog. Update it in the same commit as the change that made it stale. Keep it under ~60 lines; git history holds the rest.
 
-Last updated: 2026-09-26
+Last updated: 2026-09-27
 
 Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, digest. Everything left before the 20th is mine: the company paragraph and the "why this company" answer for the two nearest-deadline applications.
 
@@ -32,7 +32,7 @@ Current focus: Block 2 is done — fetch, extract, filter, score, shortlist, dig
 
 ## In progress
 
-- **ADRs 0008 and 0011 are `Proposed` and waiting on me.** 0008 supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. 0011 (#114) is a daily fetch that runs without the laptop; nothing is built for it. ADR 0009 is accepted: the phone snapshot (`jobagent snapshot`, `cloudflare/public/`) downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login. ADR 0010 is accepted: a hosted companion under `cloudflare/` with owner-only writes (Pages Functions, D1, GitHub OAuth), built and tested on synthetic data only. `jobagent sync` reconciles the board with it by hand only (a dry run unless `--yes`; refuses if the Access gate answers anonymously), and the registry now grants each hosted field. `jobagent purge` empties the hosted copy first and names what it cannot reach (D1 Time Travel, old Pages deployments). The Pages project is live behind Access with D1 bound, the phone sign-in and 30-day session work, and the first `jobagent sync` ran on 2026-09-26. `make phone` redeploys without touching the dashboard's bindings; the laptop's `JOBAGENT_*` variables are exported per terminal session, stored nowhere.
+- **ADRs 0008 and 0011 are `Proposed` and waiting on me.** 0008 supersedes 0005's claim that Workday's API is in maintenance — it is not, and the 403 that corroborated it was our own proxy; the decision stands, only its reasoning changes. 0011 (#114) is a daily fetch that runs without the laptop; nothing is built for it. ADR 0009 is accepted: the phone snapshot (`jobagent snapshot`, `cloudflare/public/`) downgrades `jobs.state` from critical to let a read-only board view sit behind a Cloudflare Access login. ADR 0010 is accepted: a hosted companion under `cloudflare/` with owner-only writes (Pages Functions, D1, GitHub OAuth), built and tested on synthetic data only. `jobagent sync` reconciles the board with it by hand only (a dry run unless `--yes`; refuses if the Access gate answers anonymously), and the registry now grants each hosted field. `jobagent purge` empties the hosted copy first and names what it cannot reach (D1 Time Travel, old Pages deployments). Phone status editing is deployed (2026-09-27): each signed-in role has a status picker and Save status button. Saved maps to the local New state; the other board stages round-trip unchanged. Saves use CSRF and version checks, snapshots remain read-only, and the next manual `jobagent sync --yes` brings phone edits home. The Pages project is live behind Access with D1 bound, the phone sign-in and 30-day session work, and the first `jobagent sync` ran on 2026-09-26. `make phone` redeploys without touching the dashboard's bindings; the laptop's `JOBAGENT_*` variables are exported per terminal session, stored nowhere.
 
 ## Next
 
